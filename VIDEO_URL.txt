@@ -1,0 +1,6 @@
+Walkthrough video (3-5 min):
+
+<paste unlisted Loom or YouTube link here before submitting>
+
+Covers: main user flow, what works end to end, deliberate scope cuts,
+key implementation decisions, and how AI supported the workflow.

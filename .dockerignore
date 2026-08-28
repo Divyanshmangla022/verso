@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+web/dist
+.git
+*.log
+.env
+**/.env
+docs/screenshots
+mongodb-binaries
