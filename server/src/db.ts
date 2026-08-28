@@ -47,7 +47,10 @@ export async function connectDb(uri: string = config.mongoUri): Promise<Db> {
   if (db) return db;
   client = new MongoClient(uri);
   await client.connect();
-  db = client.db(); // db name comes from the URI path
+  // The URI path names the database; a URI pasted without one would silently
+  // land in Mongo's default "test" database, so fall back to "verso".
+  const uriDbName = client.db().databaseName;
+  db = client.db(uriDbName === 'test' ? 'verso' : uriDbName);
   bucket = new GridFSBucket(db, { bucketName: 'attachments' });
   await ensureIndexes(db);
   return db;

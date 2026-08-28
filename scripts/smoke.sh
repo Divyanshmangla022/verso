@@ -9,7 +9,7 @@ BASE="${BASE%/}"
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); echo "  PASS  $1"; }
 bad()  { FAIL=$((FAIL+1)); echo "  FAIL  $1 -> $2"; }
-json() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);console.log(eval('j'+process.argv[1]))}catch{console.log('')}})" "$1"; }
+json() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);const v=eval('j'+process.argv[1]);console.log(v===undefined||v===null?'':v)}catch{console.log('')}})" "$1"; }
 
 echo "Smoke testing $BASE"
 H=$(curl -s --max-time 60 "$BASE/api/health")
