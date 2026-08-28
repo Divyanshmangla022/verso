@@ -57,6 +57,7 @@ function EditorInner() {
   const [titleIdeas, setTitleIdeas] = useState<string[] | null>(null);
   const [titleBusy, setTitleBusy] = useState(false);
   const [maxUploadMb, setMaxUploadMb] = useState(10);
+  const [aiCharLimit, setAiCharLimit] = useState(50_000);
 
   const versionRef = useRef(0);
   const dirtyRef = useRef(false);
@@ -102,7 +103,13 @@ function EditorInner() {
       .catch((err: unknown) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Failed to open document');
       });
-    api.meta().then((m) => setMaxUploadMb(m.maxUploadMb)).catch(() => undefined);
+    api
+      .meta()
+      .then((m) => {
+        setMaxUploadMb(m.maxUploadMb);
+        if (m.ai.selectionCharLimit) setAiCharLimit(m.ai.selectionCharLimit);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -285,6 +292,13 @@ function EditorInner() {
     const text = editor.state.doc.textBetween(from, to, '\n\n', '\n').trim();
     if (!text) {
       toast.show('Select some text first');
+      return;
+    }
+    if (text.length > aiCharLimit) {
+      toast.show(
+        `That selection is ${text.length.toLocaleString()} characters - the AI limit is ${aiCharLimit.toLocaleString()}. Select a smaller passage, or use Summarize for the whole document.`,
+        'error',
+      );
       return;
     }
     setAiSelection({ action, text, from, to });

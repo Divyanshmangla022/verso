@@ -22,7 +22,10 @@ export const conflict = (msg: string, details?: unknown) => new HttpError(409, m
 export function parseBody<T>(schema: ZodType<T>, body: unknown): T {
   const result = schema.safeParse(body);
   if (!result.success) {
-    throw badRequest('Validation failed', formatZodError(result.error));
+    const issues = formatZodError(result.error);
+    // Lead with the first field's own message ("Selection is too long...")
+    // instead of a generic "Validation failed" the user can't act on.
+    throw badRequest(issues[0]?.message ?? 'Validation failed', issues);
   }
   return result.data;
 }

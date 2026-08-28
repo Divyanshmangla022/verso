@@ -66,7 +66,11 @@ export function createApp(): Express {
     res.json({
       supportedImports: SUPPORTED_IMPORTS,
       maxUploadMb: config.maxUploadMb,
-      ai: { enabled: await geminiAvailable(), engine: (await geminiAvailable()) ? 'gemini' : 'heuristic' },
+      ai: {
+        enabled: await geminiAvailable(),
+        engine: (await geminiAvailable()) ? 'gemini' : 'heuristic',
+        selectionCharLimit: 50_000,
+      },
     });
   });
 

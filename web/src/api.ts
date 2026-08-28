@@ -96,7 +96,11 @@ export const api = {
     request<AuthResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, name, password }) }),
   me: () => request<{ user: AuthResponse['user'] }>('/api/auth/me'),
   meta: () =>
-    request<{ supportedImports: string[]; maxUploadMb: number; ai: { enabled: boolean; engine: string } }>('/api/meta'),
+    request<{
+      supportedImports: string[];
+      maxUploadMb: number;
+      ai: { enabled: boolean; engine: string; selectionCharLimit?: number };
+    }>('/api/meta'),
 
   // ---- documents ----
   listDocs: () => request<DocListResponse>('/api/docs'),

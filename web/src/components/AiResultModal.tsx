@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
-import type { AiAction } from '@verso/shared';
+import { AI_TONES, type AiAction, type AiTone } from '@verso/shared';
 import { aiApi } from '../api';
 import { textToNodes } from './textToNodes';
 import { Modal, useToast } from './ui';
@@ -13,7 +13,7 @@ const ACTION_LABELS: Record<AiAction, string> = {
   tone: 'Change tone',
 };
 
-const TONES = ['professional', 'casual', 'friendly', 'formal', 'confident'];
+const TONES = AI_TONES;
 
 export interface AiSelection {
   action: AiAction;
@@ -36,7 +36,7 @@ export function AiResultModal({
   onClose: () => void;
 }) {
   const toast = useToast();
-  const [tone, setTone] = useState(TONES[0]);
+  const [tone, setTone] = useState<AiTone>(TONES[0]);
   const [output, setOutput] = useState('');
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
@@ -139,7 +139,7 @@ export function AiResultModal({
             className="select"
             value={tone}
             onChange={(e) => {
-              setTone(e.target.value);
+              setTone(e.target.value as AiTone);
               run(e.target.value);
             }}
           >

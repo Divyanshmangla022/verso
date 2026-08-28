@@ -37,7 +37,7 @@ export async function geminiAvailable(): Promise<boolean> {
   return Boolean(config.geminiApiKey) && (await loadGenAi()) !== null;
 }
 
-async function* geminiStream(systemInstruction: string, prompt: string): AsyncIterable<string> {
+async function* geminiStream(systemInstruction: string, prompt: string, signal?: AbortSignal): AsyncIterable<string> {
   const mod = await loadGenAi();
   if (!mod) throw new Error('@google/genai is not installed');
   const client = new mod.GoogleGenAI({ apiKey: config.geminiApiKey });
@@ -48,6 +48,9 @@ async function* geminiStream(systemInstruction: string, prompt: string): AsyncIt
       systemInstruction,
       temperature: 0.4,
       maxOutputTokens: 2048,
+      // Cancels the upstream call when the client disconnects or the
+      // per-request timeout fires - no orphaned billable streams.
+      ...(signal ? { abortSignal: signal } : {}),
     },
   });
   for await (const chunk of stream) {
@@ -65,6 +68,7 @@ const ASSIST_SYSTEM = [
   'You are given a passage selected by the user from their document, and one instruction.',
   'Return ONLY the transformed passage as plain text (no markdown fences, no preamble,',
   'no explanations). Preserve the meaning and factual content unless asked otherwise.',
+  'Keep the original paragraph and line-break structure unless the instruction requires changing it.',
   'Match the original language of the passage.',
   UNTRUSTED,
 ].join(' ');
@@ -73,7 +77,7 @@ function assistPrompt(input: AssistInput): string {
   const instruction: Record<AiAction, string> = {
     rewrite: 'Rewrite this passage to be clearer and better written.',
     shorten: 'Rewrite this passage to be significantly more concise while keeping every key point.',
-    expand: 'Expand this passage with more detail and better flow, staying faithful to its intent.',
+    expand: 'Expand this passage to roughly 1.5-2x its length with more detail and better flow, staying faithful to its intent. Do not invent facts.',
     grammar: 'Fix grammar, spelling, and punctuation. Change nothing else.',
     tone: `Rewrite this passage in a ${input.tone ?? 'professional'} tone.`,
   };
@@ -97,7 +101,7 @@ const SUMMARY_SYSTEM = [
 const ASK_SYSTEM = [
   'You answer questions about a single document in the Verso editor.',
   'Answer ONLY from the document content provided. If the document does not contain',
-  'the answer, say so plainly. Be concise. Plain text only.',
+  'the answer, say so plainly. Default to 2-4 sentences unless the question needs more. Plain text only.',
   UNTRUSTED,
 ].join(' ');
 
@@ -186,21 +190,24 @@ function clip(text: string): string {
   return text.length > config.aiContextCharLimit ? text.slice(0, config.aiContextCharLimit) + '\n[truncated]' : text;
 }
 
-export async function runAssist(input: AssistInput): Promise<AiRun> {
+export async function runAssist(input: AssistInput, signal?: AbortSignal): Promise<AiRun> {
   if (await geminiAvailable()) {
     return {
       engine: 'gemini',
       model: config.geminiModel,
-      stream: geminiStream(ASSIST_SYSTEM, assistPrompt({ ...input, text: clip(input.text) })),
+      stream: geminiStream(ASSIST_SYSTEM, assistPrompt({ ...input, text: clip(input.text) }), signal),
     };
   }
   return heuristicAssist(input);
 }
 
-export async function runSummarize(docTitle: string, docText: string): Promise<AiRun> {
+export async function runSummarize(docTitle: string, docText: string, signal?: AbortSignal): Promise<AiRun> {
+  if (docText.trim().length === 0) {
+    return { engine: 'heuristic', stream: once('This document is empty - there is nothing to summarize yet.') };
+  }
   if (await geminiAvailable()) {
     const prompt = `Document title: ${docTitle}\n\nDocument content:\n"""\n${clip(docText)}\n"""`;
-    return { engine: 'gemini', model: config.geminiModel, stream: geminiStream(SUMMARY_SYSTEM, prompt) };
+    return { engine: 'gemini', model: config.geminiModel, stream: geminiStream(SUMMARY_SYSTEM, prompt, signal) };
   }
   return heuristicSummary(docText);
 }
@@ -228,6 +235,7 @@ function heuristicTitles(docTitle: string, docText: string): TitleSuggestions {
 }
 
 export async function runTitleSuggest(docTitle: string, docText: string): Promise<TitleSuggestions> {
+  if (docText.trim().length === 0) return { engine: 'heuristic', titles: [docTitle || 'Untitled document'] };
   if (!(await geminiAvailable())) return heuristicTitles(docTitle, docText);
   const mod = await loadGenAi();
   if (!mod) return heuristicTitles(docTitle, docText);
@@ -259,10 +267,13 @@ export async function runTitleSuggest(docTitle: string, docText: string): Promis
   }
 }
 
-export async function runAsk(docTitle: string, docText: string, question: string): Promise<AiRun> {
+export async function runAsk(docTitle: string, docText: string, question: string, signal?: AbortSignal): Promise<AiRun> {
+  if (docText.trim().length === 0) {
+    return { engine: 'heuristic', stream: once('This document is empty - add some content before asking questions about it.') };
+  }
   if (await geminiAvailable()) {
     const prompt = `Document title: ${docTitle}\n\nDocument content:\n"""\n${clip(docText)}\n"""\n\nQuestion: ${question}`;
-    return { engine: 'gemini', model: config.geminiModel, stream: geminiStream(ASK_SYSTEM, prompt) };
+    return { engine: 'gemini', model: config.geminiModel, stream: geminiStream(ASK_SYSTEM, prompt, signal) };
   }
   return heuristicAsk(docText, question);
 }

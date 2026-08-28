@@ -239,3 +239,32 @@ describe('AI title suggestions', () => {
     assert.equal(denied.status, 403);
   });
 });
+
+describe('AI guardrails', () => {
+  it('rejects oversize selections and non-allowlisted tones with actionable messages', async () => {
+    const owner = await registerUser('guard@test.dev', 'Guard Rail');
+    const created = await call<{ id: string }>('POST', '/api/docs', { token: owner.token, body: { title: 'Guarded' } });
+    const docId = created.body.id;
+
+    const big = await call<{ error: string }>('POST', '/api/ai/assist', {
+      token: owner.token,
+      body: { docId, action: 'rewrite', text: 'x'.repeat(50_001) },
+    });
+    assert.equal(big.status, 400);
+    assert.match(big.body.error, /50,000 characters/);
+
+    const badTone = await call('POST', '/api/ai/assist', {
+      token: owner.token,
+      body: { docId, action: 'tone', tone: 'pirate', text: 'hello there' },
+    });
+    assert.equal(badTone.status, 400);
+  });
+
+  it('answers empty documents without calling any AI engine', async () => {
+    const owner = await registerUser('empty@test.dev', 'Empty Doc');
+    const created = await call<{ id: string }>('POST', '/api/docs', { token: owner.token, body: { title: 'Empty' } });
+    const res = await call<string>('POST', '/api/ai/summarize', { token: owner.token, body: { docId: created.body.id } });
+    assert.equal(res.status, 200);
+    assert.match(res.body, /empty/i);
+  });
+});

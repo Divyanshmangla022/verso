@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { z } from 'zod';
-import type { AiStreamEvent } from '@verso/shared';
+import { AI_TONES, type AiStreamEvent } from '@verso/shared';
 import { currentUser, requireAuth } from '../auth/middleware.ts';
 import { requireDocAccess } from '../docs/access.ts';
 import { asyncRoute, parseBody } from '../http/errors.ts';
@@ -13,8 +13,11 @@ import { runAsk, runAssist, runSummarize, runTitleSuggest, type AiRun } from './
 const assistSchema = z.object({
   docId: z.string().min(1),
   action: z.enum(['rewrite', 'shorten', 'expand', 'grammar', 'tone']),
-  text: z.string().min(1, 'Select some text first').max(20_000, 'Selection is too long for AI assist'),
-  tone: z.string().trim().max(40).optional(),
+  text: z
+    .string()
+    .min(1, 'Select some text first')
+    .max(50_000, 'That selection is too long for AI assist (limit 50,000 characters). Select a smaller passage.'),
+  tone: z.enum(AI_TONES).optional(),
 });
 
 const askSchema = z.object({
@@ -40,6 +43,13 @@ function sseWrite(res: Response, event: AiStreamEvent): void {
   res.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 
+/** Abort when the client disconnects or the request outlives its budget. */
+function requestSignal(res: Response, ms = 60_000): AbortSignal {
+  const controller = new AbortController();
+  res.on('close', () => controller.abort());
+  return AbortSignal.any([controller.signal, AbortSignal.timeout(ms)]);
+}
+
 /** Stream an AI run as server-sent events over a POST response body. */
 async function streamRun(res: Response, run: AiRun): Promise<void> {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -59,6 +69,11 @@ async function streamRun(res: Response, run: AiRun): Promise<void> {
     }
     sseWrite(res, { type: 'done' });
   } catch (err) {
+    if ((err as Error)?.name === 'AbortError' || res.destroyed) {
+      // Client went away or the time budget expired - nothing useful to send.
+      res.end();
+      return;
+    }
     console.error('AI stream failed:', err);
     sseWrite(res, { type: 'error', message: 'The AI request failed. Please try again.' });
   } finally {
@@ -73,7 +88,10 @@ aiRouter.post(
     const user = currentUser(req);
     const body = parseBody(assistSchema, req.body);
     const { doc } = await requireDocAccess(user._id, body.docId, 'viewer');
-    const run = await runAssist({ action: body.action, text: body.text, tone: body.tone, docTitle: doc.title });
+    const run = await runAssist(
+      { action: body.action, text: body.text, tone: body.tone, docTitle: doc.title },
+      requestSignal(res),
+    );
     await streamRun(res, run);
   }),
 );
@@ -85,7 +103,7 @@ aiRouter.post(
     const user = currentUser(req);
     const body = parseBody(summarizeSchema, req.body);
     const { doc } = await requireDocAccess(user._id, body.docId, 'viewer');
-    const run = await runSummarize(doc.title, docToText(doc.content));
+    const run = await runSummarize(doc.title, docToText(doc.content), requestSignal(res));
     await streamRun(res, run);
   }),
 );
@@ -97,7 +115,7 @@ aiRouter.post(
     const user = currentUser(req);
     const body = parseBody(askSchema, req.body);
     const { doc } = await requireDocAccess(user._id, body.docId, 'viewer');
-    const run = await runAsk(doc.title, docToText(doc.content), body.question);
+    const run = await runAsk(doc.title, docToText(doc.content), body.question, requestSignal(res));
     await streamRun(res, run);
   }),
 );

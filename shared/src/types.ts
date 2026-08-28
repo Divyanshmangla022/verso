@@ -79,6 +79,10 @@ export interface AttachmentMeta {
 
 export type AiAction = 'rewrite' | 'shorten' | 'expand' | 'grammar' | 'tone';
 
+/** Allowed tones for the tone action - validated server-side, listed client-side. */
+export const AI_TONES = ['professional', 'casual', 'friendly', 'formal', 'confident'] as const;
+export type AiTone = (typeof AI_TONES)[number];
+
 export interface AiAssistRequest {
   docId: string;
   action: AiAction;
