@@ -5,7 +5,7 @@ assignment: rich-text editing, file import, attachments, sharing with roles,
 version history, and an integrated AI writing layer - all persisted in MongoDB.
 
 **Source:** https://github.com/Divyanshmangla022/verso
-**Live demo:** _pending - filled in after the Render deploy (see `SUBMISSION.md` for the URL and demo credentials)_
+**Live demo:** https://verso-sqj0.onrender.com (free tier - the first request after idle can take ~50s to wake; demo credentials in `SUBMISSION.md`)
 
 ## Feature summary
 

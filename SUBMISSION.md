@@ -22,7 +22,7 @@ https://github.com/Divyanshmangla022/verso (public)
 
 ## Live deployment
 
-- **URL:** _<fill in after deploy - see docs/DEPLOYMENT.md>_
+- **URL:** https://verso-sqj0.onrender.com
 - Free-tier note: the first request after idle can take ~50 s (Render free
   instance waking up). Everything after that is instant.
 
