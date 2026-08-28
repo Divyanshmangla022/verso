@@ -100,7 +100,7 @@ export type AiStreamEvent =
   | { type: 'meta'; engine: 'gemini' | 'heuristic'; model?: string; note?: string }
   | { type: 'chunk'; text: string }
   | { type: 'done' }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; reason?: string };
 
 export interface ApiError {
   error: string;

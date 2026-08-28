@@ -228,6 +228,48 @@ const TITLE_SYSTEM = [
   TASK_LOCK,
 ].join(' ');
 
+/** Short, key-free description of an upstream failure for operators and the UI. */
+export function describeAiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  let text = raw;
+  try {
+    // @google/genai often puts a JSON body in the message
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (m) {
+      const j = JSON.parse(m[0]) as { error?: { code?: number; status?: string; message?: string } };
+      if (j.error) text = [j.error.code, j.error.status, j.error.message].filter(Boolean).join(' ');
+    }
+  } catch {
+    // keep raw text
+  }
+  return text.replace(/AIza[0-9A-Za-z_-]+/g, '[key]').replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+export interface AiStatus {
+  engine: 'gemini' | 'heuristic';
+  model?: string;
+  ok: boolean;
+  reason?: string;
+}
+
+/** One tiny generation to prove the key, model, and network path work from this host. */
+export async function checkAi(): Promise<AiStatus> {
+  if (!(await geminiAvailable())) return { engine: 'heuristic', ok: true };
+  const mod = await loadGenAi();
+  if (!mod) return { engine: 'heuristic', ok: true };
+  try {
+    const client = new mod.GoogleGenAI({ apiKey: config.geminiApiKey });
+    const r = await client.models.generateContent({
+      model: config.geminiModel,
+      contents: 'Reply with the single word: ok',
+      config: { maxOutputTokens: 16, thinkingConfig: { thinkingBudget: 0 }, abortSignal: AbortSignal.timeout(20_000) },
+    });
+    return { engine: 'gemini', model: config.geminiModel, ok: typeof r.text === 'string' && r.text.length > 0 };
+  } catch (err) {
+    return { engine: 'gemini', model: config.geminiModel, ok: false, reason: describeAiError(err) };
+  }
+}
+
 export interface TitleSuggestions {
   engine: 'gemini' | 'heuristic';
   titles: string[];

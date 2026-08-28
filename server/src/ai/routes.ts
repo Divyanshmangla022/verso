@@ -8,7 +8,7 @@ import { asyncRoute, parseBody } from '../http/errors.ts';
 import { rateLimit } from '../http/rateLimit.ts';
 import { config } from '../config.ts';
 import { docToText } from '../pm/content.ts';
-import { runAsk, runAssist, runSummarize, runTitleSuggest, type AiRun } from './engine.ts';
+import { checkAi, describeAiError, runAsk, runAssist, runSummarize, runTitleSuggest, type AiRun } from './engine.ts';
 
 const assistSchema = z.object({
   docId: z.string().min(1),
@@ -75,7 +75,7 @@ async function streamRun(res: Response, run: AiRun): Promise<void> {
       return;
     }
     console.error('AI stream failed:', err);
-    sseWrite(res, { type: 'error', message: 'The AI request failed. Please try again.' });
+    sseWrite(res, { type: 'error', message: 'The AI request failed. Please try again.', reason: describeAiError(err) });
   } finally {
     res.end();
   }
@@ -129,5 +129,13 @@ aiRouter.post(
     const { doc } = await requireDocAccess(user._id, body.docId, 'viewer');
     const result = await runTitleSuggest(doc.title, docToText(doc.content));
     res.json(result);
+  }),
+);
+
+// GET /api/ai/status - live self-check of the configured engine (auth required).
+aiRouter.get(
+  '/status',
+  asyncRoute(async (_req, res) => {
+    res.json(await checkAi());
   }),
 );
