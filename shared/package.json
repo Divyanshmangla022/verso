@@ -1,0 +1,13 @@
+{
+  "name": "@verso/shared",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/types.ts",
+  "types": "src/types.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

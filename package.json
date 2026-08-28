@@ -1,0 +1,19 @@
+{
+  "name": "verso",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Verso - a collaborative document editor with an AI writing layer",
+  "type": "module",
+  "engines": { "node": ">=22.6.0" },
+  "workspaces": ["shared", "server", "web"],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build -w web",
+    "start": "npm run start -w server",
+    "seed": "npm run seed -w server",
+    "test": "npm run test -w server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:up": "docker compose up -d mongo",
+    "db:down": "docker compose down"
+  }
+}
