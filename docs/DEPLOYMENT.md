@@ -51,3 +51,15 @@ docker run -p 4000:4000 \
 
 `NODE_ENV=production` is set in the image; the server refuses to boot in
 production without a real `JWT_SECRET`.
+
+## Verifying a deployment
+
+    ./scripts/smoke.sh https://<your-service>.onrender.com
+
+Runs 17 live checks with the seeded demo accounts: health, auth (incl. a
+wrong-password 401), document create/save/round-trip, the 409 conflict
+path, sharing enforcement (403 for outsiders and for viewer writes),
+Markdown export, AI streaming, cleanup, and security headers. It was run
+green against the production Docker image locally before the first
+deploy, so a failure on Render points at environment (Atlas network
+access, env vars) rather than code.
