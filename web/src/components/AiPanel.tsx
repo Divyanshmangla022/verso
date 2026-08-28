@@ -82,8 +82,8 @@ export function AiPanel({
             {summary.state.running ? 'Summarizing...' : 'Generate summary'}
           </button>
           {(summary.state.output || summary.state.running) && (
-            <div className="ai-output" style={{ marginTop: 10 }} aria-live="polite">
-              {summary.state.output || 'Thinking...'}
+            <div className={`ai-output ${summary.state.running ? 'ai-shimmer' : ''}`} style={{ marginTop: 10 }} aria-live="polite">
+              {summary.state.output || <span className="ai-thinking">✨ Thinking...</span>}
             </div>
           )}
           {summary.state.note && <div className="ai-note">{summary.state.note}</div>}
@@ -115,8 +115,8 @@ export function AiPanel({
             </button>
           </div>
           {(ask.state.output || ask.state.running) && (
-            <div className="ai-output" style={{ marginTop: 10 }} aria-live="polite">
-              {ask.state.output || 'Thinking...'}
+            <div className={`ai-output ${ask.state.running ? 'ai-shimmer' : ''}`} style={{ marginTop: 10 }} aria-live="polite">
+              {ask.state.output || <span className="ai-thinking">✨ Thinking...</span>}
             </div>
           )}
           {ask.state.note && <div className="ai-note">{ask.state.note}</div>}

@@ -46,6 +46,7 @@ function EditorInner() {
 
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [loadError, setLoadError] = useState('');
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [currentVersion, setCurrentVersion] = useState(0);
   const [panel, setPanel] = useState<Panel>(null);
@@ -105,7 +106,7 @@ function EditorInner() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, loadAttempt]);
 
   // Push loaded content into the editor once both exist.
   useEffect(() => {
@@ -292,8 +293,13 @@ function EditorInner() {
   if (loadError) {
     return (
       <div className="page-center" style={{ flexDirection: 'column', gap: 14 }}>
-        <p className="error-text" style={{ fontSize: 15 }}>{loadError}</p>
-        <Link to="/" className="btn">← Back to documents</Link>
+        <p className="error-text" style={{ fontSize: 15, margin: 0 }}>{loadError}</p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn primary" onClick={() => setLoadAttempt((a) => a + 1)}>
+            Try again
+          </button>
+          <Link to="/" className="btn">← Back to documents</Link>
+        </div>
       </div>
     );
   }
@@ -336,7 +342,7 @@ function EditorInner() {
         {!readOnly && (
           <div style={{ position: 'relative' }}>
             <button className="btn ghost sm" title="Suggest a title with AI" onClick={() => void suggestTitles()} disabled={titleBusy}>
-              {titleBusy ? <span className="spinner sm" /> : '✨'}
+              {titleBusy ? <span className="spinner sm" /> : <span className="sparkle">✨</span>}
             </button>
             {titleIdeas && (
               <div
@@ -395,7 +401,7 @@ function EditorInner() {
           🕘
         </button>
         <button className={`btn sm ${panel === 'ai' ? 'primary' : ''}`} title="AI assistant" onClick={() => setPanel((p) => (p === 'ai' ? null : 'ai'))}>
-          ✨ AI
+          <span className="sparkle">✨</span> AI
         </button>
         <span className="avatar" title={`${user?.name} - click to sign out`} style={{ cursor: 'pointer' }} onClick={logout}>
           {initials(user?.name ?? '?')}
@@ -469,7 +475,9 @@ function EditorInner() {
               <span className="divider" />
             </>
           )}
-          <span className="ai-label">✨ AI</span>
+          <button className="ai-label" title="Open the AI panel" onClick={() => setPanel('ai')} style={{ background: 'transparent', border: 0, cursor: 'pointer' }}>
+            <span className="sparkle">✨</span> AI
+          </button>
           <button onClick={() => openAi('rewrite')}>Rewrite</button>
           <button onClick={() => openAi('shorten')}>Shorten</button>
           <button onClick={() => openAi('expand')}>Expand</button>

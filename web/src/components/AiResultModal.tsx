@@ -160,8 +160,8 @@ export function AiResultModal({
       <p className="muted" style={{ margin: '14px 0 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
         Result {engine && <span className="badge ai">✨ {engine}</span>} {running && <span className="spinner sm" />}
       </p>
-      <div className="ai-output" aria-live="polite">
-        {output || (running ? 'Thinking...' : '')}
+      <div className={`ai-output ${running ? 'ai-shimmer' : ''}`} aria-live="polite">
+        {output || (running ? <span className="ai-thinking">✨ Thinking...</span> : '')}
       </div>
       {note && <div className="ai-note">{note}</div>}
       {error && <p className="error-text">{error}</p>}

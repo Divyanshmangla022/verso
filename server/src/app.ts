@@ -48,6 +48,15 @@ export function createApp(): Express {
     next();
   });
 
+  // One line per API request (no bodies, no tokens) - enough to debug without leaking.
+  app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - start}ms)`);
+    });
+    next();
+  });
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, service: 'verso', time: new Date().toISOString() });
   });

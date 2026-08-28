@@ -16,9 +16,23 @@ function Loading() {
 }
 
 function Protected({ children }: { children: React.ReactElement }) {
-  const { user, loading } = useAuth();
+  const { user, loading, offline, retry } = useAuth();
   const location = useLocation();
   if (loading) return <Loading />;
+  if (offline && !user) {
+    // A stored session exists but the server is unreachable (restart, network
+    // blip): keep the session and offer a retry instead of bouncing to login.
+    return (
+      <div className="page-center" style={{ flexDirection: 'column', gap: 14 }}>
+        <p className="error-text" style={{ fontSize: 15, margin: 0 }}>
+          Cannot reach the server. Your session is safe - it may be restarting.
+        </p>
+        <button className="btn primary" onClick={retry}>
+          Try again
+        </button>
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return children;
 }

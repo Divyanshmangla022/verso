@@ -437,3 +437,41 @@ label.field .input { margin-top: 5px; font-weight: 400; }
   .save-status { min-width: 0; }
   .sheet { min-height: 60vh; }
 }
+
+/* ---------- AI sparkle & shimmer effects ---------- */
+@keyframes twinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  25% { transform: scale(1.25) rotate(-8deg); opacity: 0.85; }
+  50% { transform: scale(0.95) rotate(6deg); opacity: 1; }
+  75% { transform: scale(1.15) rotate(-4deg); opacity: 0.9; }
+}
+.sparkle { display: inline-block; animation: twinkle 1.8s ease-in-out infinite; }
+
+/* streaming state: animated gradient sweep along the border + soft glow */
+@keyframes shimmer-border {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.ai-shimmer {
+  position: relative;
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #6366f1) border-box;
+  background-size: 100% 100%, 200% 100%;
+  animation: shimmer-border 1.6s linear infinite;
+  box-shadow: 0 0 14px rgba(124, 92, 240, 0.25);
+}
+@keyframes pulse-text {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.ai-thinking { animation: pulse-text 1.2s ease-in-out infinite; color: #7c5cf0; font-weight: 500; }
+
+/* click feedback burst on AI action buttons */
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+.bubble button:active { animation: pop 0.18s ease-out; }

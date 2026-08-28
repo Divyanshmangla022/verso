@@ -50,6 +50,8 @@ function handleSessionExpiry(path: string, status: number): void {
   }
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const token = getToken();
@@ -57,12 +59,24 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (init.body !== undefined && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  let res: Response;
-  try {
-    res = await fetch(path, { ...init, headers });
-  } catch {
-    throw new ApiRequestError(0, 'Cannot reach the server. Check your connection and try again.');
+  const method = (init.method ?? 'GET').toUpperCase();
+  // Reads are safe to retry automatically; a brief server restart or network
+  // blip then heals invisibly instead of surfacing a scary error.
+  const attempts = method === 'GET' ? 3 : 1;
+  let res: Response | null = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      res = await fetch(path, { ...init, headers });
+      break;
+    } catch {
+      if (i < attempts - 1) {
+        await sleep(600 * (i + 1));
+        continue;
+      }
+      throw new ApiRequestError(0, 'Cannot reach the server. Check your connection and try again.');
+    }
   }
+  if (!res) throw new ApiRequestError(0, 'Cannot reach the server. Check your connection and try again.');
   if (res.status === 204) return undefined as T;
   const isJson = res.headers.get('Content-Type')?.includes('application/json');
   const body = isJson ? await res.json().catch(() => null) : null;

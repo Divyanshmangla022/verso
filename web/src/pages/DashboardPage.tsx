@@ -107,7 +107,14 @@ function DashboardInner() {
           />
         </div>
 
-        {error && <p className="error-text">{error}</p>}
+        {error && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <p className="error-text" style={{ margin: 0 }}>{error}</p>
+            <button className="btn sm" onClick={() => { setError(''); reload(); }}>
+              Try again
+            </button>
+          </div>
+        )}
         {!docs && !error && (
           <div className="page-center" style={{ height: 200 }}>
             <div className="spinner" />
