@@ -4,11 +4,11 @@ import { z } from 'zod';
 import type { DocDetail, DocListResponse, DocSummary, PublicUser, SaveContentResponse, ShareEntry, VersionMeta } from '@verso/shared';
 import { currentUser, requireAuth } from '../auth/middleware.ts';
 import { toPublicUser } from '../auth/service.ts';
-import { config } from '../config.ts';
 import { documents, shares, users, versions, getBucket, type DocumentDoc, type UserDoc } from '../db.ts';
 import { asyncRoute, badRequest, conflict, notFound, parseBody, pathParam } from '../http/errors.ts';
 import { docToMarkdown, docToText, emptyDoc, validateContent, wordCount } from '../pm/content.ts';
 import { requireDocAccess } from './access.ts';
+import { recordRevision } from './versions.ts';
 
 const titleSchema = z.object({
   title: z.string().trim().min(1, 'Title cannot be empty').max(200, 'Title is too long'),
@@ -107,6 +107,7 @@ docsRouter.post(
       updatedAt: now,
     };
     const result = await documents().insertOne(doc as DocumentDoc);
+    await recordRevision({ docId: result.insertedId, version: 1, title: doc.title, content: doc.content, savedBy: user._id, at: now });
     res.status(201).json(detail({ ...(doc as DocumentDoc), _id: result.insertedId }, toPublicUser(user), 'owner', []));
   }),
 );
@@ -168,32 +169,23 @@ docsRouter.put(
       { returnDocument: 'after' },
     );
     if (!result) {
-      // Someone else (or another tab) saved since this client last loaded.
+      // Distinguish "someone saved since you loaded" from "the doc was deleted".
       const current = await documents().findOne({ _id: doc._id });
+      if (!current) throw notFound('Document not found');
       throw conflict('This document was updated elsewhere. Reload to get the latest version.', {
-        currentVersion: current?.version ?? null,
+        currentVersion: current.version,
       });
     }
 
-    // Record the superseded revision for version history, then prune to the cap.
-    await versions().insertOne({
-      _id: new ObjectId(),
+    // Record the revision that was just committed (correct author + timestamp).
+    await recordRevision({
       docId: doc._id,
-      version: doc.version,
-      title: doc.title,
-      content: doc.content,
+      version: result.version,
+      title: result.title,
+      content,
       savedBy: user._id,
-      createdAt: updatedAt,
+      at: updatedAt,
     });
-    const excess = await versions()
-      .find({ docId: doc._id })
-      .sort({ version: -1 })
-      .skip(config.maxVersionsPerDoc)
-      .project<{ _id: ObjectId }>({ _id: 1 })
-      .toArray();
-    if (excess.length > 0) {
-      await versions().deleteMany({ _id: { $in: excess.map((v) => v._id) } });
-    }
 
     const body: SaveContentResponse = { version: result.version, updatedAt: updatedAt.toISOString() };
     res.json(body);
@@ -207,9 +199,7 @@ docsRouter.delete(
     const user = currentUser(req);
     const { doc } = await requireDocAccess(user._id, pathParam(req, 'id'), 'owner');
     const bucket = getBucket();
-    const files = await getBucket()
-      .find({ 'metadata.docId': doc._id })
-      .toArray();
+    const files = await bucket.find({ 'metadata.docId': doc._id }).toArray();
     await Promise.all(files.map((f) => bucket.delete(f._id)));
     await Promise.all([
       shares().deleteMany({ docId: doc._id }),
@@ -220,13 +210,16 @@ docsRouter.delete(
   }),
 );
 
-// GET /api/docs/:id/versions — version history metadata, newest first.
+// GET /api/docs/:id/versions — history metadata, newest first (current revision excluded).
 docsRouter.get(
   '/:id/versions',
   asyncRoute(async (req, res) => {
     const user = currentUser(req);
     const { doc } = await requireDocAccess(user._id, pathParam(req, 'id'), 'viewer');
-    const list = await versions().find({ docId: doc._id }).sort({ version: -1 }).toArray();
+    const list = await versions()
+      .find({ docId: doc._id, version: { $lt: doc.version } })
+      .sort({ version: -1 })
+      .toArray();
     const userMap = await loadUsers([...new Set(list.flatMap((v) => (v.savedBy ? [v.savedBy] : [])))]);
     const body: VersionMeta[] = list.map((v) => ({
       version: v.version,
@@ -252,7 +245,8 @@ docsRouter.get(
   }),
 );
 
-// POST /api/docs/:id/versions/:version/restore — owner or editor; snapshots current first.
+// POST /api/docs/:id/versions/:version/restore — owner or editor.
+// Version-guarded like a normal save: a concurrent edit wins a 409, never silent loss.
 docsRouter.post(
   '/:id/versions/:version/restore',
   asyncRoute(async (req, res) => {
@@ -264,21 +258,26 @@ docsRouter.post(
     if (!rev) throw notFound('That revision is no longer available');
 
     const updatedAt = new Date();
-    await versions().insertOne({
-      _id: new ObjectId(),
-      docId: doc._id,
-      version: doc.version,
-      title: doc.title,
-      content: doc.content,
-      savedBy: user._id,
-      createdAt: updatedAt,
-    });
     const updated = await documents().findOneAndUpdate(
-      { _id: doc._id },
+      { _id: doc._id, version: doc.version },
       { $set: { content: rev.content, updatedAt }, $inc: { version: 1 } },
       { returnDocument: 'after' },
     );
-    if (!updated) throw notFound('Document not found');
+    if (!updated) {
+      const current = await documents().findOne({ _id: doc._id });
+      if (!current) throw notFound('Document not found');
+      throw conflict('This document was updated while restoring. Reload and try again.', {
+        currentVersion: current.version,
+      });
+    }
+    await recordRevision({
+      docId: doc._id,
+      version: updated.version,
+      title: updated.title,
+      content: rev.content,
+      savedBy: user._id,
+      at: updatedAt,
+    });
     const body: SaveContentResponse & { content: unknown } = {
       version: updated.version,
       updatedAt: updatedAt.toISOString(),

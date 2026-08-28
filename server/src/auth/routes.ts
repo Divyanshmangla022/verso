@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { AuthResponse } from '@verso/shared';
 import { asyncRoute, parseBody } from '../http/errors.ts';
+import { ipKey, rateLimit } from '../http/rateLimit.ts';
+import { config } from '../config.ts';
 import { currentUser, requireAuth } from './middleware.ts';
 import { authenticate, registerUser, signToken, toPublicUser } from './service.ts';
 
@@ -19,6 +21,12 @@ const loginSchema = z.object({
 });
 
 export const authRouter = Router();
+
+// Per-IP throttle on credential endpoints: blunts brute force and mass signup.
+authRouter.use(
+  ['/login', '/register'],
+  rateLimit({ windowMs: 5 * 60_000, max: config.rateLimitAuthMax, keyFor: ipKey, message: 'Too many attempts. Try again in a few minutes.' }),
+);
 
 authRouter.post(
   '/register',

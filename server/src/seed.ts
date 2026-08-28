@@ -10,6 +10,7 @@ import bcrypt from 'bcryptjs';
 import { config } from './config.ts';
 import { closeDb, connectDb, documents, shares, users } from './db.ts';
 import { importFile } from './files/importers.ts';
+import { recordRevision } from './docs/versions.ts';
 
 const PASSWORD = process.env.SEED_PASSWORD ?? 'VersoDemo1!';
 
@@ -89,6 +90,7 @@ async function main(): Promise<void> {
       createdAt: now,
       updatedAt: now,
     } as Parameters<ReturnType<typeof documents>['insertOne']>[0]);
+    await recordRevision({ docId: result.insertedId, version: 1, title, content, savedBy: ownerId, at: now });
     console.log(`doc created: "${title}" (owner ${ownerEmail})`);
     return result.insertedId;
   };

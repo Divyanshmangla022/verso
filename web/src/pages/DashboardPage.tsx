@@ -52,7 +52,8 @@ function DashboardInner() {
     setBusy(true);
     try {
       const result = await api.importFile(file);
-      toast.show(`Imported "${result.title}"`);
+      if (result.warnings.length > 0) toast.show(`Imported with notes: ${result.warnings[0]}`);
+      else toast.show(`Imported "${result.title}"`);
       navigate(`/doc/${result.id}`);
     } catch (err) {
       const msg =

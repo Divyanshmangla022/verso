@@ -42,6 +42,14 @@ export class ApiRequestError extends Error {
   }
 }
 
+/** A 401 outside the auth endpoints means the session expired: reset to /login. */
+function handleSessionExpiry(path: string, status: number): void {
+  if (status === 401 && !path.startsWith('/api/auth/')) {
+    setToken(null);
+    window.location.assign('/login');
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const token = getToken();
@@ -59,6 +67,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const isJson = res.headers.get('Content-Type')?.includes('application/json');
   const body = isJson ? await res.json().catch(() => null) : null;
   if (!res.ok) {
+    handleSessionExpiry(path, res.status);
     const message = (body as { error?: string } | null)?.error ?? `Request failed (${res.status})`;
     throw new ApiRequestError(res.status, message, (body as { details?: unknown } | null)?.details);
   }
@@ -105,7 +114,7 @@ export const api = {
   importFile: (file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return request<{ id: string; title: string; importedFrom: string }>('/api/docs/import', {
+    return request<{ id: string; title: string; importedFrom: string; warnings: string[] }>('/api/docs/import', {
       method: 'POST',
       body: form,
     });
@@ -176,6 +185,7 @@ async function streamSse(path: string, body: unknown, handlers: AiStreamHandlers
     return;
   }
   if (!res.ok || !res.body) {
+    handleSessionExpiry(path, res.status);
     const json = await res.json().catch(() => null);
     handlers.onError?.((json as { error?: string } | null)?.error ?? `AI request failed (${res.status})`);
     return;

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { aiApi } from '../api';
 import { textToNodes } from './textToNodes';
@@ -16,6 +16,7 @@ const idle: StreamState = { output: '', running: false, engine: '', note: '', er
 function useAiStream() {
   const [state, setState] = useState<StreamState>(idle);
   const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []); // stop streaming when the panel closes
   const start = (runner: (handlers: Parameters<typeof aiApi.summarize>[1], signal: AbortSignal) => Promise<void>) => {
     abortRef.current?.abort();
     const controller = new AbortController();

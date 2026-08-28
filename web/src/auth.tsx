@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { PublicUser } from '@verso/shared';
-import { api, getToken, setToken } from './api';
+import { api, ApiRequestError, getToken, setToken } from './api';
 
 interface AuthState {
   user: PublicUser | null;
@@ -24,8 +24,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(({ user: u }) => {
         if (!cancelled) setUser(u);
       })
-      .catch(() => {
-        setToken(null);
+      .catch((err: unknown) => {
+        // Only a real 401 invalidates the stored session; a transient network
+        // failure on load must not log the user out.
+        if (err instanceof ApiRequestError && err.status === 401) setToken(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -5,6 +5,8 @@ import type { AiStreamEvent } from '@verso/shared';
 import { currentUser, requireAuth } from '../auth/middleware.ts';
 import { requireDocAccess } from '../docs/access.ts';
 import { asyncRoute, parseBody } from '../http/errors.ts';
+import { rateLimit } from '../http/rateLimit.ts';
+import { config } from '../config.ts';
 import { docToText } from '../pm/content.ts';
 import { runAsk, runAssist, runSummarize, type AiRun } from './engine.ts';
 
@@ -24,6 +26,15 @@ const summarizeSchema = z.object({ docId: z.string().min(1) });
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
+// Per-user quota: AI calls can bill an upstream API, so cap request volume.
+aiRouter.use(
+  rateLimit({
+    windowMs: 5 * 60_000,
+    max: config.rateLimitAiMax,
+    keyFor: (req) => req.user?._id.toString() ?? 'anon',
+    message: 'AI request limit reached. Try again in a few minutes.',
+  }),
+);
 
 function sseWrite(res: Response, event: AiStreamEvent): void {
   res.write(`data: ${JSON.stringify(event)}\n\n`);

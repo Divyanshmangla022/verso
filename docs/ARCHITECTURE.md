@@ -90,5 +90,37 @@ exercises the real code path.
 2. **PDF export** via headless print styling (Markdown/TXT export exists).
 3. **AI "structure this document"** — turn a pasted wall of text into
    headings/lists using the existing import sanitizer as the safety gate.
-4. **Rate limiting on auth + AI routes** (per-IP token bucket) — the main
-   hardening gap I'd close before real users.
+4. **Presence-aware conflict UX** — show who else has the doc open before
+   an edit collides, softening the 409 flow into an expected hand-off.
+
+## Hardening applied after the adversarial review pass
+
+A 32-agent review workflow (5 parallel reviewers × adversarial verifiers)
+confirmed 17 distinct defects, all fixed and locked in by regression tests:
+
+- **Version restore is now version-guarded** like any save (409 on a
+  concurrent edit instead of silent loss) and every revision snapshot is
+  recorded *after* its write commits, so history attributes the right
+  author and timestamp to each version.
+- **TipTap v3 toolbars** subscribe via `useEditorState` (v3 stopped
+  re-rendering React on transactions — active states were stale).
+- **The autosave machine keeps dirty tracking through conflict/denied
+  states**, so the tab-close warning stays honest; access revocation
+  mid-edit flips the editor read-only with an explanatory banner.
+- **Zip-bomb guard** on `.docx` import: the ZIP central directory is read
+  (no decompression) and the declared inflated size is capped before
+  mammoth runs. Import surfaces mammoth's warnings (dropped images/tables).
+- **Rate limiting** (in-memory fixed-window): per-IP on login/register,
+  per-user on AI routes.
+- **`javascript:`/`data:` link hrefs are stripped** at the validation
+  boundary; Markdown export escapes metacharacters and no longer rewrites
+  blank lines inside code blocks; non-ASCII upload filenames are decoded
+  correctly (multer's latin1 default).
+- The dev JWT secret is generated per machine (gitignored) instead of a
+  hardcoded fallback; transient network failures at startup no longer log
+  the user out (only a real 401 clears the session).
+
+Deliberate residual tradeoff: registration and share-by-email reveal
+whether an account exists. For an internal collaboration tool this is the
+intended UX ("no account for x@y — ask them to register"), and the auth
+rate limiter blunts bulk enumeration.

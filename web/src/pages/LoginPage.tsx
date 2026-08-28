@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 
 const DEMO_ACCOUNTS = [
@@ -11,6 +11,8 @@ const DEMO_PASSWORD = 'VersoDemo1!';
 export function LoginPage() {
   const { user, login, register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from ?? '/';
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -18,7 +20,7 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to={from} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,7 +29,7 @@ export function LoginPage() {
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, name, password);
-      navigate('/', { replace: true });
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -40,7 +42,7 @@ export function LoginPage() {
     setBusy(true);
     try {
       await login(demoEmail, DEMO_PASSWORD);
-      navigate('/', { replace: true });
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Demo login failed — has the database been seeded?');
     } finally {

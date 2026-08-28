@@ -13,6 +13,9 @@ const NODE_TYPES = new Set([
 ]);
 const MARK_TYPES = new Set(['bold', 'italic', 'underline', 'strike', 'code', 'link']);
 
+/** Protocols a link mark may carry. Anything else (javascript:, data:, …) is stripped. */
+const SAFE_LINK = /^(https?:|mailto:|tel:|\/|#)/i;
+
 const MAX_CONTENT_BYTES = 2 * 1024 * 1024; // 2 MB of JSON per document
 const MAX_DEPTH = 60;
 
@@ -44,7 +47,21 @@ export function validateContent(raw: unknown): PMNode {
     throw badRequest('Document content is not valid editor JSON', parsed.error.issues.slice(0, 5).map((i) => ({ path: i.path.join('.'), message: i.message })));
   }
   if (parsed.data.type !== 'doc') throw badRequest('Content root must be a "doc" node');
+  stripUnsafeLinks(parsed.data);
   return parsed.data;
+}
+
+/** Remove link marks whose href is not a safe protocol (defense in depth for exports/consumers). */
+function stripUnsafeLinks(node: PMNode): void {
+  if (node.marks) {
+    node.marks = node.marks.filter((m) => {
+      if (m.type !== 'link') return true;
+      const href = typeof m.attrs?.href === 'string' ? m.attrs.href.trim() : '';
+      return SAFE_LINK.test(href);
+    });
+    if (node.marks.length === 0) delete node.marks;
+  }
+  for (const child of node.content ?? []) stripUnsafeLinks(child);
 }
 
 function depthOf(node: unknown, depth: number): number {
@@ -106,68 +123,79 @@ export function wordCount(node: PMNode): number {
   return text.length === 0 ? 0 : text.split(/\s+/).filter(Boolean).length;
 }
 
-/** Serialize a document to GitHub-flavored Markdown for export. */
+/**
+ * Serialize a document to GitHub-flavored Markdown for export.
+ * Blocks are serialized independently and joined with exactly one blank line,
+ * so code-block content (which may legitimately contain blank lines) is
+ * never rewritten. Underline has no Markdown syntax and exports as <u>…</u>
+ * (HTML passthrough, standard in GFM).
+ */
 export function docToMarkdown(node: PMNode): string {
-  return serializeBlocks(node.content ?? [], '').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+  return blocksToMarkdown(node.content ?? [], '') + '\n';
 }
 
-function serializeBlocks(nodes: PMNode[], indent: string): string {
-  const parts: string[] = [];
-  for (const n of nodes) {
-    switch (n.type) {
-      case 'paragraph':
-        parts.push(indent + inline(n) + '\n\n');
-        break;
-      case 'heading': {
-        const level = Math.min(Math.max(Number(n.attrs?.level ?? 1), 1), 6);
-        parts.push(indent + '#'.repeat(level) + ' ' + inline(n) + '\n\n');
-        break;
-      }
-      case 'bulletList':
-        parts.push(listItems(n, indent, () => '- '));
-        break;
-      case 'orderedList': {
-        const start = Number(n.attrs?.start ?? 1);
-        parts.push(listItems(n, indent, (i) => `${start + i}. `));
-        break;
-      }
-      case 'blockquote':
-        parts.push(
-          serializeBlocks(n.content ?? [], '')
-            .trim()
-            .split('\n')
-            .map((line) => indent + '> ' + line)
-            .join('\n') + '\n\n',
-        );
-        break;
-      case 'codeBlock': {
-        const lang = typeof n.attrs?.language === 'string' ? n.attrs.language : '';
-        parts.push(indent + '```' + lang + '\n' + inline(n) + '\n' + indent + '```\n\n');
-        break;
-      }
-      case 'horizontalRule':
-        parts.push(indent + '---\n\n');
-        break;
-      default:
-        if (n.content) parts.push(serializeBlocks(n.content, indent));
+function blocksToMarkdown(nodes: PMNode[], indent: string): string {
+  return nodes
+    .map((n) => blockToMarkdown(n, indent))
+    .filter((s) => s.length > 0)
+    .join('\n\n');
+}
+
+function blockToMarkdown(n: PMNode, indent: string): string {
+  switch (n.type) {
+    case 'paragraph':
+      return indent + inline(n);
+    case 'heading': {
+      const level = Math.min(Math.max(Number(n.attrs?.level ?? 1), 1), 6);
+      return indent + '#'.repeat(level) + ' ' + inline(n);
     }
+    case 'bulletList':
+      return listToMarkdown(n, indent, () => '- ');
+    case 'orderedList': {
+      const start = Number(n.attrs?.start ?? 1);
+      return listToMarkdown(n, indent, (i) => `${start + i}. `);
+    }
+    case 'blockquote':
+      return blocksToMarkdown(n.content ?? [], '')
+        .split('\n')
+        .map((line) => indent + '> ' + line)
+        .join('\n');
+    case 'codeBlock': {
+      const lang = typeof n.attrs?.language === 'string' ? n.attrs.language : '';
+      const code = rawText(n); // verbatim — no escaping, no normalization
+      return indent + '```' + lang + '\n' + code + '\n' + indent + '```';
+    }
+    case 'horizontalRule':
+      return indent + '---';
+    default:
+      return n.content ? blocksToMarkdown(n.content, indent) : '';
   }
-  return parts.join('');
 }
 
-function listItems(list: PMNode, indent: string, bullet: (i: number) => string): string {
+function listToMarkdown(list: PMNode, indent: string, bullet: (i: number) => string): string {
   const items = list.content ?? [];
-  const parts: string[] = [];
-  items.forEach((item, i) => {
-    const marker = bullet(i);
-    const body = serializeBlocks(item.content ?? [], '').trim();
-    const lines = body.split('\n');
-    parts.push(
-      indent + marker + lines[0] + '\n' +
-      lines.slice(1).map((l) => indent + ' '.repeat(marker.length) + l).join('\n'),
-    );
-  });
-  return parts.join('\n').replace(/\n+$/, '') + '\n\n';
+  return items
+    .map((item, i) => {
+      const marker = bullet(i);
+      const body = blocksToMarkdown(item.content ?? [], '');
+      const lines = body.split('\n');
+      return (
+        indent + marker + (lines[0] ?? '') +
+        (lines.length > 1 ? '\n' + lines.slice(1).map((l) => indent + ' '.repeat(marker.length) + l).join('\n') : '')
+      );
+    })
+    .join('\n');
+}
+
+function rawText(node: PMNode): string {
+  let out = node.text ?? '';
+  for (const child of node.content ?? []) out += rawText(child);
+  return out;
+}
+
+/** Escape Markdown metacharacters in plain text runs so exports round-trip. */
+function escapeMd(text: string): string {
+  return text.replace(/([\\`*_[\]<>])/g, '\\$1');
 }
 
 function inline(node: PMNode): string {
@@ -178,9 +206,8 @@ function inline(node: PMNode): string {
       continue;
     }
     if (child.type === 'text') {
-      let text = child.text ?? '';
       const marks = new Set((child.marks ?? []).map((m) => m.type));
-      if (marks.has('code')) text = '`' + text + '`';
+      let text = marks.has('code') ? '`' + (child.text ?? '') + '`' : escapeMd(child.text ?? '');
       if (marks.has('bold')) text = '**' + text + '**';
       if (marks.has('italic')) text = '*' + text + '*';
       if (marks.has('strike')) text = '~~' + text + '~~';

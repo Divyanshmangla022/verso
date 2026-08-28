@@ -4,6 +4,7 @@ import mammoth from 'mammoth';
 import MarkdownIt from 'markdown-it';
 import type { PMNode } from '@verso/shared';
 import { badRequest } from '../http/errors.ts';
+import { assertZipWithinLimits } from './zipGuard.ts';
 import { textToDoc, validateContent } from '../pm/content.ts';
 
 /**
@@ -20,6 +21,8 @@ const extensions = [StarterKit];
 export interface ImportedDoc {
   title: string;
   content: PMNode;
+  /** Human-readable notes about content the import had to drop (e.g. images). */
+  warnings: string[];
 }
 
 export async function importFile(originalName: string, buffer: Buffer): Promise<ImportedDoc> {
@@ -27,6 +30,7 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
   const fallbackTitle = originalName.replace(/\.[^.]+$/, '').trim() || 'Imported document';
 
   let content: PMNode;
+  const warnings: string[] = [];
   switch (ext) {
     case '.txt': {
       content = textToDoc(buffer.toString('utf8'));
@@ -38,10 +42,15 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
       break;
     }
     case '.docx': {
+      assertZipWithinLimits(buffer);
       let html: string;
       try {
         const result = await mammoth.convertToHtml({ buffer });
         html = result.value;
+        if (/<img/i.test(html) || /<table/i.test(html)) {
+          warnings.push('Images and tables are not supported in the editor and were removed.');
+        }
+        for (const m of result.messages.slice(0, 3)) warnings.push(m.message);
       } catch {
         throw badRequest('Could not read this .docx file — it may be corrupted or not a real Word document');
       }
@@ -52,7 +61,7 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
       throw badRequest(`Unsupported file type "${ext || 'unknown'}". Supported: ${SUPPORTED_IMPORTS.join(', ')}`);
   }
 
-  return { title: deriveTitle(content) ?? fallbackTitle, content };
+  return { title: deriveTitle(content) ?? fallbackTitle, content, warnings };
 }
 
 export function extensionOf(name: string): string {

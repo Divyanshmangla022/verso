@@ -9,7 +9,18 @@ import { config } from '../config.ts';
 import { documents, getBucket, toObjectId, users, type DocumentDoc } from '../db.ts';
 import { requireDocAccess } from '../docs/access.ts';
 import { asyncRoute, badRequest, notFound, pathParam } from '../http/errors.ts';
-import { extensionOf, importFile, SUPPORTED_IMPORTS } from './importers.ts';
+import { importFile, SUPPORTED_IMPORTS } from './importers.ts';
+import { recordRevision } from '../docs/versions.ts';
+
+/** multer decodes filenames as latin1; recover UTF-8 names (é, 中, …). */
+function decodeFilename(name: string): string {
+  try {
+    const decoded = Buffer.from(name, 'latin1').toString('utf8');
+    return decoded.includes('FFFD') ? name : decoded;
+  } catch {
+    return name;
+  }
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -26,7 +37,8 @@ filesRouter.post(
   asyncRoute(async (req, res) => {
     const user = currentUser(req);
     if (!req.file) throw badRequest(`Attach a file (field name "file"). Supported: ${SUPPORTED_IMPORTS.join(', ')}`);
-    const { title, content } = await importFile(req.file.originalname, req.file.buffer);
+    const originalName = decodeFilename(req.file.originalname);
+    const { title, content, warnings } = await importFile(originalName, req.file.buffer);
     const now = new Date();
     const doc: Omit<DocumentDoc, '_id'> = {
       title,
@@ -37,10 +49,12 @@ filesRouter.post(
       updatedAt: now,
     };
     const result = await documents().insertOne(doc as DocumentDoc);
+    await recordRevision({ docId: result.insertedId, version: 1, title, content, savedBy: user._id, at: now });
     res.status(201).json({
       id: result.insertedId.toString(),
       title,
-      importedFrom: req.file.originalname,
+      importedFrom: originalName,
+      warnings,
     });
   }),
 );
@@ -77,16 +91,22 @@ filesRouter.post(
     const { doc } = await requireDocAccess(user._id, pathParam(req, 'id'), 'editor');
     if (!req.file) throw badRequest('Attach a file (field name "file")');
     const bucket = getBucket();
-    const uploadStream = bucket.openUploadStream(req.file.originalname, {
+    const uploadStream = bucket.openUploadStream(decodeFilename(req.file.originalname), {
       metadata: {
         docId: doc._id,
         uploadedBy: user._id,
         mimeType: req.file.mimetype || 'application/octet-stream',
       },
     });
-    await new Promise<void>((resolve, reject) => {
-      Readable.from(req.file!.buffer).pipe(uploadStream).on('finish', () => resolve()).on('error', reject);
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        Readable.from(req.file!.buffer).pipe(uploadStream).on('finish', () => resolve()).on('error', reject);
+      });
+    } catch (err) {
+      // Abort the half-written GridFS file so no orphan chunks remain.
+      await uploadStream.abort().catch(() => undefined);
+      throw err;
+    }
     const stored = await bucket.find({ _id: uploadStream.id }).next();
     if (!stored) throw notFound('Upload failed');
     res.status(201).json(await attachmentToMeta(stored));

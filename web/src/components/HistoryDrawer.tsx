@@ -1,22 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { VersionMeta } from '@verso/shared';
 import { api } from '../api';
-import { timeAgo, useToast } from './ui';
+import { timeAgo } from './ui';
 
 export function HistoryDrawer({
   docId,
   currentVersion,
   canEdit,
-  onRestored,
+  onRestore,
   onClose,
 }: {
   docId: string;
   currentVersion: number;
   canEdit: boolean;
-  onRestored: (content: unknown, version: number) => void;
+  /** Provided by the editor page: flushes pending saves, then restores. Resolves true on success. */
+  onRestore: (version: number) => Promise<boolean>;
   onClose: () => void;
 }) {
-  const toast = useToast();
   const [list, setList] = useState<VersionMeta[] | null>(null);
   const [restoring, setRestoring] = useState<number | null>(null);
 
@@ -27,17 +27,15 @@ export function HistoryDrawer({
       .catch(() => setList([]));
   }, [docId]);
 
+  // currentVersion is reactive state on the editor page, so a save or restore
+  // while the drawer is open re-fetches the list automatically.
   useEffect(reload, [reload, currentVersion]);
 
   const restore = async (version: number) => {
     setRestoring(version);
     try {
-      const result = await api.restoreVersion(docId, version);
-      onRestored(result.content, result.version);
-      toast.show(`Restored version ${version}`);
-      reload();
-    } catch (err) {
-      toast.show(err instanceof Error ? err.message : 'Restore failed', 'error');
+      const ok = await onRestore(version);
+      if (ok) reload();
     } finally {
       setRestoring(null);
     }

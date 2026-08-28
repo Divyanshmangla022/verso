@@ -4,7 +4,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
-import type { AiAction, DocDetail, PMNode, ShareEntry } from '@verso/shared';
+import type { AiAction, DocDetail, PMNode } from '@verso/shared';
 import { api, ApiRequestError } from '../api';
 import { useAuth } from '../auth';
 import { AiResultModal, type AiSelection } from '../components/AiResultModal';
@@ -15,7 +15,17 @@ import { ShareDialog } from '../components/ShareDialog';
 import { Toolbar } from '../components/Toolbar';
 import { initials, ToastProvider, useToast } from '../components/ui';
 
-type SaveState = 'saved' | 'dirty' | 'saving' | 'conflict' | 'error';
+/**
+ * Save state machine:
+ *  saved    — editor content matches the server
+ *  dirty    — local changes await the debounced autosave
+ *  saving   — a PUT is in flight
+ *  error    — transient failure; dirty is preserved and a retry is scheduled
+ *  conflict — server moved past baseVersion; autosave halts, banner offers reload;
+ *             local edits stay in the editor (and keep the unload warning) until then
+ *  denied   — access was revoked mid-session; editor flips to read-only
+ */
+type SaveState = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict' | 'denied';
 type Panel = 'ai' | 'attachments' | 'history' | null;
 
 const AUTOSAVE_DEBOUNCE_MS = 900;
@@ -37,6 +47,7 @@ function EditorInner() {
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [loadError, setLoadError] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('saved');
+  const [currentVersion, setCurrentVersion] = useState(0);
   const [panel, setPanel] = useState<Panel>(null);
   const [showShare, setShowShare] = useState(false);
   const [showExport, setShowExport] = useState(false);
@@ -46,14 +57,13 @@ function EditorInner() {
 
   const versionRef = useRef(0);
   const dirtyRef = useRef(false);
-  const savingRef = useRef(false);
+  const savingRef = useRef<Promise<void> | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const conflictRef = useRef(false);
-
+  const haltedRef = useRef(false); // true in conflict/denied: no more autosaves
   const modalOpenRef = useRef(false);
   modalOpenRef.current = showShare || aiSelection !== null || showExport;
 
-  const readOnly = doc ? doc.myRole === 'viewer' : true;
+  const readOnly = doc ? doc.myRole === 'viewer' || saveState === 'denied' : true;
   const isOwner = doc?.myRole === 'owner';
 
   const editor = useEditor({
@@ -63,8 +73,10 @@ function EditorInner() {
     ],
     editable: false,
     onUpdate: () => {
-      if (conflictRef.current) return;
+      // Always track dirtiness (so the unload warning stays honest), but only
+      // schedule autosaves while the machine is allowed to save.
       dirtyRef.current = true;
+      if (haltedRef.current) return;
       setSaveState((s) => (s === 'saving' ? s : 'dirty'));
       scheduleSave();
     },
@@ -82,6 +94,7 @@ function EditorInner() {
         setDoc(d);
         setTitle(d.title);
         versionRef.current = d.version;
+        setCurrentVersion(d.version);
       })
       .catch((err: unknown) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Failed to open document');
@@ -95,7 +108,7 @@ function EditorInner() {
   // Push loaded content into the editor once both exist.
   useEffect(() => {
     if (!editor || !doc) return;
-    conflictRef.current = false;
+    haltedRef.current = false;
     editor.commands.setContent(doc.content as never, { emitUpdate: false });
     editor.setEditable(doc.myRole !== 'viewer');
     dirtyRef.current = false;
@@ -104,32 +117,38 @@ function EditorInner() {
   }, [editor, doc?.id]);
 
   // ---- autosave ----
-  const saveNow = useCallback(async () => {
-    if (!editor || savingRef.current || conflictRef.current || !dirtyRef.current) return;
-    savingRef.current = true;
+  const saveNow = useCallback((): Promise<void> => {
+    if (!editor || haltedRef.current || !dirtyRef.current) return savingRef.current ?? Promise.resolve();
+    if (savingRef.current) return savingRef.current; // one flight at a time; finally() reschedules
     dirtyRef.current = false;
     setSaveState('saving');
     const content = editor.getJSON() as PMNode;
-    try {
-      const result = await api.saveContent(id, content, versionRef.current);
-      versionRef.current = result.version;
-      setSaveState(dirtyRef.current ? 'dirty' : 'saved');
-    } catch (err) {
-      if (err instanceof ApiRequestError && err.status === 409) {
-        conflictRef.current = true;
-        setSaveState('conflict');
-      } else if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
-        setSaveState('error');
-        toast.show(err.message, 'error');
-      } else {
-        dirtyRef.current = true; // retry on next change or timer
-        setSaveState('error');
-        scheduleSave();
+    const flight = (async () => {
+      try {
+        const result = await api.saveContent(id, content, versionRef.current);
+        versionRef.current = result.version;
+        setCurrentVersion(result.version);
+        setSaveState(dirtyRef.current ? 'dirty' : 'saved');
+      } catch (err) {
+        dirtyRef.current = true; // whatever happened, this content is not on the server
+        if (err instanceof ApiRequestError && err.status === 409) {
+          haltedRef.current = true;
+          setSaveState('conflict');
+        } else if (err instanceof ApiRequestError && (err.status === 403 || err.status === 404)) {
+          haltedRef.current = true;
+          setSaveState('denied');
+          editor.setEditable(false);
+        } else {
+          setSaveState('error');
+          scheduleSave(); // transient: retry
+        }
+      } finally {
+        savingRef.current = null;
+        if (dirtyRef.current && !haltedRef.current) scheduleSave();
       }
-    } finally {
-      savingRef.current = false;
-      if (dirtyRef.current && !conflictRef.current) scheduleSave();
-    }
+    })();
+    savingRef.current = flight;
+    return flight;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, id]);
 
@@ -158,7 +177,7 @@ function EditorInner() {
     };
   }, [saveNow]);
 
-  // Warn before closing with unsaved changes.
+  // Warn before closing while any local change is not on the server.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (dirtyRef.current || savingRef.current) e.preventDefault();
@@ -190,12 +209,45 @@ function EditorInner() {
       setDoc(d);
       setTitle(d.title);
       versionRef.current = d.version;
-      conflictRef.current = false;
+      setCurrentVersion(d.version);
+      haltedRef.current = false;
       dirtyRef.current = false;
-      if (editor) editor.commands.setContent(d.content as never, { emitUpdate: false });
+      if (editor) {
+        editor.commands.setContent(d.content as never, { emitUpdate: false });
+        editor.setEditable(d.myRole !== 'viewer');
+      }
       setSaveState('saved');
     } catch (err) {
       toast.show(err instanceof Error ? err.message : 'Reload failed', 'error');
+    }
+  };
+
+  // ---- version restore (flushes pending work first so nothing is silently lost) ----
+  const restoreVersion = async (version: number): Promise<boolean> => {
+    if (!editor) return false;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    await saveNow(); // flush local edits; sets conflict/denied on failure
+    if (haltedRef.current) {
+      toast.show('Resolve the banner above before restoring', 'error');
+      return false;
+    }
+    try {
+      const result = await api.restoreVersion(id, version);
+      versionRef.current = result.version;
+      setCurrentVersion(result.version);
+      dirtyRef.current = false;
+      editor.commands.setContent(result.content as never, { emitUpdate: false });
+      setSaveState('saved');
+      toast.show(`Restored version ${version}`);
+      return true;
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 409) {
+        haltedRef.current = true;
+        setSaveState('conflict');
+      } else {
+        toast.show(err instanceof Error ? err.message : 'Restore failed', 'error');
+      }
+      return false;
     }
   };
 
@@ -230,8 +282,9 @@ function EditorInner() {
     saved: 'All changes saved',
     dirty: 'Unsaved changes…',
     saving: 'Saving…',
-    conflict: 'Version conflict',
     error: 'Save failed — retrying',
+    conflict: 'Version conflict',
+    denied: 'Access changed',
   };
 
   return (
@@ -254,7 +307,7 @@ function EditorInner() {
           aria-label="Document title"
         />
         <span className={`badge ${doc.myRole}`}>{doc.myRole}</span>
-        {!readOnly && <span className={`save-status ${saveState === 'conflict' || saveState === 'error' ? 'error' : ''}`}>{statusLabel[saveState]}</span>}
+        {!readOnly && <span className={`save-status ${saveState === 'conflict' || saveState === 'error' || saveState === 'denied' ? 'error' : ''}`}>{statusLabel[saveState]}</span>}
         <div className="spacer" />
         {isOwner && (
           <button className="btn sm" onClick={() => setShowShare(true)}>
@@ -298,13 +351,18 @@ function EditorInner() {
 
       {saveState === 'conflict' && (
         <div className="conflict-banner">
-          This document was changed elsewhere (another tab or collaborator).
+          This document was changed elsewhere. Your latest edits are only in this view — copy anything important, then
           <button className="btn sm" onClick={() => void reloadLatest()}>
             Load latest version
           </button>
         </div>
       )}
-      {readOnly && (
+      {saveState === 'denied' && (
+        <div className="conflict-banner">
+          Your access to this document changed — it is now read-only here. Copy any unsaved work before leaving.
+        </div>
+      )}
+      {doc.myRole === 'viewer' && (
         <div className="readonly-banner">
           You have view-only access to this document. Ask {doc.owner.name} for editor access to make changes.
         </div>
@@ -326,16 +384,10 @@ function EditorInner() {
         {panel === 'history' && (
           <HistoryDrawer
             docId={doc.id}
-            currentVersion={versionRef.current}
+            currentVersion={currentVersion}
             canEdit={!readOnly}
             onClose={() => setPanel(null)}
-            onRestored={(content, version) => {
-              versionRef.current = version;
-              conflictRef.current = false;
-              dirtyRef.current = false;
-              editor.commands.setContent(content as never, { emitUpdate: false });
-              setSaveState('saved');
-            }}
+            onRestore={restoreVersion}
           />
         )}
       </div>

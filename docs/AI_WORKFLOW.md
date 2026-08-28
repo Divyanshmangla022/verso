@@ -24,10 +24,12 @@ rejected, and how correctness was verified.
   review pass ran five parallel reviewers (server logic, security, frontend
   state machines, data integrity, UX edge cases), and every finding was then
   attacked by an independent "skeptic" agent instructed to refute it by
-  reading the actual code and library sources. Only findings that survived
-  refutation were fixed. This caught real bugs (documented in the repo
-  history) while filtering out the plausible-but-wrong noise LLM reviews
-  typically produce.
+  reading the actual code and library sources (32 agents total). 24 of 27
+  findings survived refutation (~17 distinct defects after dedup) and were
+  fixed with regression tests; 3 were proven wrong and discarded. The
+  standout catch: TipTap v3 silently stopped re-rendering React toolbars on
+  editor transactions - invisible in a quick manual test, guaranteed to be
+  noticed by a careful reviewer.
 
 ## AI output that was changed or rejected
 

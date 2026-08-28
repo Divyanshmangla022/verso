@@ -12,6 +12,7 @@ import type { Server } from 'node:http';
 
 process.env.NODE_ENV = 'test';
 process.env.BCRYPT_ROUNDS = '4'; // keep hashing fast in tests
+process.env.RATE_LIMIT_AUTH_MAX = '1000'; // the suite registers many users from one IP
 
 const { createApp } = await import('../src/app.ts');
 const { closeDb, connectDb } = await import('../src/db.ts');

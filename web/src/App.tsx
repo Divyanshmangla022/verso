@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
@@ -17,8 +17,9 @@ function Loading() {
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <Loading />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return children;
 }
 
