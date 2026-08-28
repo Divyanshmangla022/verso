@@ -5,21 +5,21 @@ free web service plus a free MongoDB Atlas cluster is the whole footprint.
 
 ## Recommended: Render (free) + MongoDB Atlas (free M0)
 
-### 1. Database — MongoDB Atlas
+### 1. Database - MongoDB Atlas
 1. Create a free **M0** cluster at https://cloud.mongodb.com.
-2. Database Access → add a user (password auth).
-3. Network Access → allow `0.0.0.0/0` (Render's egress IPs vary on the free tier).
+2. Database Access -> add a user (password auth).
+3. Network Access -> allow `0.0.0.0/0` (Render's egress IPs vary on the free tier).
 4. Copy the connection string and append a database name:
    `mongodb+srv://USER:PASS@cluster0.xxxxx.mongodb.net/verso?retryWrites=true&w=majority`
 
-### 2. Web service — Render
+### 2. Web service - Render
 1. Push this repo to GitHub.
-2. Render → **New → Blueprint** → point it at the repo. `render.yaml` defines
+2. Render -> **New -> Blueprint** -> point it at the repo. `render.yaml` defines
    the service (Docker runtime, free plan, health check on `/api/health`,
    auto-generated `JWT_SECRET`).
 3. In the service's Environment tab set:
-   - `MONGODB_URI` — the Atlas string from step 1
-   - `GEMINI_API_KEY` — optional; without it the AI runs in labeled heuristic mode
+ - `MONGODB_URI` - the Atlas string from step 1
+ - `GEMINI_API_KEY` - optional; without it the AI runs in labeled heuristic mode
 4. Deploy. First build takes a few minutes.
 
 ### 3. Seed demo data (once)

@@ -79,11 +79,11 @@ export function AiPanel({
             disabled={summary.state.running}
             onClick={() => summary.start((handlers, signal) => aiApi.summarize(docId, handlers, signal))}
           >
-            {summary.state.running ? 'Summarizing…' : 'Generate summary'}
+            {summary.state.running ? 'Summarizing...' : 'Generate summary'}
           </button>
           {(summary.state.output || summary.state.running) && (
             <div className="ai-output" style={{ marginTop: 10 }} aria-live="polite">
-              {summary.state.output || 'Thinking…'}
+              {summary.state.output || 'Thinking...'}
             </div>
           )}
           {summary.state.note && <div className="ai-note">{summary.state.note}</div>}
@@ -116,7 +116,7 @@ export function AiPanel({
           </div>
           {(ask.state.output || ask.state.running) && (
             <div className="ai-output" style={{ marginTop: 10 }} aria-live="polite">
-              {ask.state.output || 'Thinking…'}
+              {ask.state.output || 'Thinking...'}
             </div>
           )}
           {ask.state.note && <div className="ai-note">{ask.state.note}</div>}

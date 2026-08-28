@@ -12,7 +12,7 @@ import { asyncRoute, badRequest, notFound, pathParam } from '../http/errors.ts';
 import { importFile, SUPPORTED_IMPORTS } from './importers.ts';
 import { recordRevision } from '../docs/versions.ts';
 
-/** multer decodes filenames as latin1; recover UTF-8 names (é, 中, …). */
+/** multer decodes filenames as latin1; recover UTF-8 names (é, 中, ...). */
 function decodeFilename(name: string): string {
   try {
     const decoded = Buffer.from(name, 'latin1').toString('utf8');
@@ -30,7 +30,7 @@ const upload = multer({
 export const filesRouter = Router();
 filesRouter.use(requireAuth);
 
-// POST /api/docs/import — turn an uploaded .txt/.md/.docx into a new editable document.
+// POST /api/docs/import - turn an uploaded .txt/.md/.docx into a new editable document.
 filesRouter.post(
   '/docs/import',
   upload.single('file'),
@@ -82,7 +82,7 @@ const attachmentToMeta = async (file: {
   };
 };
 
-// POST /api/docs/:id/attachments — attach any file to a document (stored in GridFS).
+// POST /api/docs/:id/attachments - attach any file to a document (stored in GridFS).
 filesRouter.post(
   '/docs/:id/attachments',
   upload.single('file'),
@@ -113,7 +113,7 @@ filesRouter.post(
   }),
 );
 
-// GET /api/docs/:id/attachments — list a document's attachments.
+// GET /api/docs/:id/attachments - list a document's attachments.
 filesRouter.get(
   '/docs/:id/attachments',
   asyncRoute(async (req, res) => {
@@ -124,7 +124,7 @@ filesRouter.get(
   }),
 );
 
-// GET /api/docs/:id/attachments/:fileId — download (access-checked, then streamed).
+// GET /api/docs/:id/attachments/:fileId - download (access-checked, then streamed).
 filesRouter.get(
   '/docs/:id/attachments/:fileId',
   asyncRoute(async (req, res) => {
@@ -142,7 +142,7 @@ filesRouter.get(
   }),
 );
 
-// DELETE /api/docs/:id/attachments/:fileId — owner or editor.
+// DELETE /api/docs/:id/attachments/:fileId - owner or editor.
 filesRouter.delete(
   '/docs/:id/attachments/:fileId',
   asyncRoute(async (req, res) => {

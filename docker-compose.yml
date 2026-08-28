@@ -3,9 +3,9 @@ services:
     image: mongo:7
     container_name: verso-mongo
     ports:
-      - "27017:27017"
+ - "27017:27017"
     volumes:
-      - verso_mongo_data:/data/db
+ - verso_mongo_data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
       interval: 5s

@@ -75,7 +75,7 @@ export function HistoryDrawer({
               </div>
               {canEdit && (
                 <button className="btn sm" disabled={restoring !== null} onClick={() => void restore(v.version)}>
-                  {restoring === v.version ? 'Restoring…' : 'Restore'}
+                  {restoring === v.version ? 'Restoring...' : 'Restore'}
                 </button>
               )}
             </div>

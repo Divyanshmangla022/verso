@@ -11,11 +11,11 @@ const grantSchema = z.object({
   role: z.enum(['viewer', 'editor']),
 });
 
-/** Mounted at /api/docs — sharing is owner-only by design (documented scope cut: no re-sharing). */
+/** Mounted at /api/docs - sharing is owner-only by design (documented scope cut: no re-sharing). */
 export const shareRouter = Router();
 shareRouter.use(requireAuth);
 
-// POST /api/docs/:id/shares — grant (or update) access for another user by email.
+// POST /api/docs/:id/shares - grant (or update) access for another user by email.
 shareRouter.post(
   '/:id/shares',
   asyncRoute(async (req, res) => {
@@ -48,7 +48,7 @@ shareRouter.post(
   }),
 );
 
-// DELETE /api/docs/:id/shares/:userId — revoke access.
+// DELETE /api/docs/:id/shares/:userId - revoke access.
 shareRouter.delete(
   '/:id/shares/:userId',
   asyncRoute(async (req, res) => {

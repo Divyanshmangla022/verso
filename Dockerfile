@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Verso — single-image production build.
+# Verso - single-image production build.
 # Stage 1 builds the static web app; stage 2 runs the API (Node 26 executes
 # TypeScript natively, so the server needs no compile step) and serves web/dist.
 # ---------------------------------------------------------------------------

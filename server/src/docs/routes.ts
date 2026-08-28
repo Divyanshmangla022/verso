@@ -46,7 +46,7 @@ function summary(doc: DocumentDoc, owner: PublicUser, myRole: DocSummary['myRole
   };
 }
 
-// GET /api/docs — the dashboard split: documents I own vs. documents shared with me.
+// GET /api/docs - the dashboard split: documents I own vs. documents shared with me.
 docsRouter.get(
   '/',
   asyncRoute(async (req, res) => {
@@ -91,7 +91,7 @@ docsRouter.get(
   }),
 );
 
-// POST /api/docs — create a blank document.
+// POST /api/docs - create a blank document.
 docsRouter.post(
   '/',
   asyncRoute(async (req, res) => {
@@ -117,7 +117,7 @@ function detail(doc: DocumentDoc, owner: PublicUser, myRole: DocDetail['myRole']
   return { ...base, content: doc.content, ...(sharedWith ? { sharedWith } : {}) };
 }
 
-// GET /api/docs/:id — full document, plus the share list when the requester owns it.
+// GET /api/docs/:id - full document, plus the share list when the requester owns it.
 docsRouter.get(
   '/:id',
   asyncRoute(async (req, res) => {
@@ -140,7 +140,7 @@ docsRouter.get(
   }),
 );
 
-// PATCH /api/docs/:id — rename (owner or editor).
+// PATCH /api/docs/:id - rename (owner or editor).
 docsRouter.patch(
   '/:id',
   asyncRoute(async (req, res) => {
@@ -153,7 +153,7 @@ docsRouter.patch(
   }),
 );
 
-// PUT /api/docs/:id/content — autosave with optimistic concurrency.
+// PUT /api/docs/:id/content - autosave with optimistic concurrency.
 docsRouter.put(
   '/:id/content',
   asyncRoute(async (req, res) => {
@@ -192,7 +192,7 @@ docsRouter.put(
   }),
 );
 
-// DELETE /api/docs/:id — owner only; removes shares, versions, and attachments too.
+// DELETE /api/docs/:id - owner only; removes shares, versions, and attachments too.
 docsRouter.delete(
   '/:id',
   asyncRoute(async (req, res) => {
@@ -210,7 +210,7 @@ docsRouter.delete(
   }),
 );
 
-// GET /api/docs/:id/versions — history metadata, newest first (current revision excluded).
+// GET /api/docs/:id/versions - history metadata, newest first (current revision excluded).
 docsRouter.get(
   '/:id/versions',
   asyncRoute(async (req, res) => {
@@ -231,7 +231,7 @@ docsRouter.get(
   }),
 );
 
-// GET /api/docs/:id/versions/:version — preview a historical revision.
+// GET /api/docs/:id/versions/:version - preview a historical revision.
 docsRouter.get(
   '/:id/versions/:version',
   asyncRoute(async (req, res) => {
@@ -245,7 +245,7 @@ docsRouter.get(
   }),
 );
 
-// POST /api/docs/:id/versions/:version/restore — owner or editor.
+// POST /api/docs/:id/versions/:version/restore - owner or editor.
 // Version-guarded like a normal save: a concurrent edit wins a 409, never silent loss.
 docsRouter.post(
   '/:id/versions/:version/restore',
@@ -287,7 +287,7 @@ docsRouter.post(
   }),
 );
 
-// GET /api/docs/:id/export?format=md|txt — download the document.
+// GET /api/docs/:id/export?format=md|txt - download the document.
 docsRouter.get(
   '/:id/export',
   asyncRoute(async (req, res) => {

@@ -28,7 +28,7 @@ export function setToken(token: string | null): void {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
   } catch {
-    /* storage unavailable — session-only auth */
+    /* storage unavailable - session-only auth */
   }
 }
 
@@ -226,6 +226,11 @@ async function streamSse(path: string, body: unknown, handlers: AiStreamHandlers
 }
 
 export const aiApi = {
+  suggestTitles: (docId: string) =>
+    request<{ engine: 'gemini' | 'heuristic'; titles: string[] }>('/api/ai/title', {
+      method: 'POST',
+      body: JSON.stringify({ docId }),
+    }),
   assist: (body: AiAssistRequest, handlers: AiStreamHandlers, signal?: AbortSignal) =>
     streamSse('/api/ai/assist', body, handlers, signal),
   summarize: (docId: string, handlers: AiStreamHandlers, signal?: AbortSignal) =>

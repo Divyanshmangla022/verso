@@ -1,22 +1,22 @@
-# Render Blueprint — deploys the single-image app.
+# Render Blueprint - deploys the single-image app.
 # Pair with a free MongoDB Atlas M0 cluster: set MONGODB_URI to its
 # connection string (mongodb+srv://...) in the Render dashboard.
 services:
-  - type: web
+ - type: web
     name: verso
     runtime: docker
     plan: free
     healthCheckPath: /api/health
     envVars:
-      - key: NODE_ENV
+ - key: NODE_ENV
         value: production
-      - key: PORT
+ - key: PORT
         value: "4000"
-      - key: MONGODB_URI
+ - key: MONGODB_URI
         sync: false # paste the Atlas connection string in the dashboard
-      - key: JWT_SECRET
+ - key: JWT_SECRET
         generateValue: true
-      - key: GEMINI_API_KEY
-        sync: false # optional — leave empty for heuristic AI mode
-      - key: GEMINI_MODEL
+ - key: GEMINI_API_KEY
+        sync: false # optional - leave empty for heuristic AI mode
+ - key: GEMINI_MODEL
         value: gemini-2.5-flash

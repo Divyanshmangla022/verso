@@ -4,7 +4,7 @@ import { badRequest } from '../http/errors.ts';
  * Zip-bomb guard for .docx uploads. A .docx is a ZIP; mammoth fully inflates
  * it in memory, so a small upload with an extreme compression ratio could
  * exhaust the process. Before handing the buffer to mammoth we read the ZIP
- * end-of-central-directory record and sum the declared uncompressed sizes —
+ * end-of-central-directory record and sum the declared uncompressed sizes - 
  * no decompression involved.
  */
 const MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024; // 50 MB total inflated

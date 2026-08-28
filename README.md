@@ -1,8 +1,8 @@
-# Verso — a lightweight collaborative document editor
+# Verso - a lightweight collaborative document editor
 
 Verso is a Google-Docs-inspired document editor built for the Ajaia full-stack
 assignment: rich-text editing, file import, attachments, sharing with roles,
-version history, and an integrated AI writing layer — all persisted in MongoDB.
+version history, and an integrated AI writing layer - all persisted in MongoDB.
 
 **Live demo:** see `SUBMISSION.md` for the deployed URL and demo credentials.
 
@@ -11,19 +11,19 @@ version history, and an integrated AI writing layer — all persisted in MongoDB
 | Area | What works |
 |---|---|
 | Documents | Create, rename (inline + dashboard), edit, autosave, reopen, delete |
-| Rich text | Bold, italic, underline, strikethrough, inline code, H1–H3, bulleted & numbered lists, quotes, code blocks, dividers, undo/redo |
+| Rich text | Bold, italic, underline, strikethrough, inline code, H1-H3, bulleted & numbered lists, quotes, code blocks, dividers, undo/redo |
 | File upload | Import `.txt`, `.md`, `.docx` as a new editable document (limits shown in the UI); attach **any** file type to a document (10 MB cap, stored in GridFS) |
 | Sharing | Owner grants access by email as **editor** or **viewer**; role changes and revocation; dashboard splits **My documents** / **Shared with me**; all rules enforced server-side |
 | Persistence | MongoDB; content stored as ProseMirror JSON so formatting round-trips exactly; optimistic concurrency (409 + reload banner on conflicting saves) |
 | Version history | Snapshot on every save (capped at 20), preview metadata, one-click restore |
 | Export | Markdown or plain text download |
-| AI layer | Select text → **Rewrite / Shorten / Expand / Fix grammar / Change tone**; whole-document **Summarize** and **Ask this document** — streamed live (SSE). Uses Google Gemini when `GEMINI_API_KEY` is set; otherwise an honest, clearly-labeled heuristic fallback so every flow still works |
+| AI layer | Select text -> **Rewrite / Shorten / Expand / Fix grammar / Change tone**; whole-document **Summarize**, **Ask this document**, and one-click **AI title suggestions** - streamed live (SSE). Uses Google Gemini when `GEMINI_API_KEY` is set; otherwise an honest, clearly-labeled heuristic fallback so every flow still works |
 
 Supported import types: **`.txt`, `.md`, `.docx`** (stated in the upload UI as well).
 
 ## Run locally
 
-Prerequisites: **Node.js ≥ 22.6** (developed on Node 26 — the server runs
+Prerequisites: **Node.js ≥ 22.6** (developed on Node 26 - the server runs
 TypeScript natively, no build step) and **Docker** (for MongoDB) *or* any
 MongoDB ≥ 6 on `localhost:27017`.
 
@@ -79,11 +79,11 @@ npm run typecheck    # strict TypeScript across all three workspaces
 
 ```
 shared/   Types shared by server and web (the API contract)
-server/   Express 5 API — auth, docs, sharing, files, AI (native TS, no build)
+server/   Express 5 API - auth, docs, sharing, files, AI (native TS, no build)
 web/      React 19 + TipTap 3 single-page app (Vite)
 docs/     Architecture note, AI workflow note, deployment guide, screenshots
 ```
 
-More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
-[docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md) ·
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) -
+[docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md) -
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)

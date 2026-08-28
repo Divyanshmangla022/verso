@@ -22,7 +22,7 @@ export function verifyToken(token: string): string {
     if (typeof payload === 'string' || typeof payload.sub !== 'string') throw new Error('bad payload');
     return payload.sub;
   } catch {
-    throw unauthorized('Invalid or expired session — please log in again');
+    throw unauthorized('Invalid or expired session - please log in again');
   }
 }
 

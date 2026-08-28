@@ -3,7 +3,7 @@ import { useEditorState } from '@tiptap/react';
 
 /**
  * Formatting toolbar. TipTap v3 does not re-render React on every editor
- * transaction, so active states are derived through useEditorState — it
+ * transaction, so active states are derived through useEditorState - it
  * subscribes to transactions and re-renders only when the selected slice changes.
  */
 export function Toolbar({ editor }: { editor: Editor }) {
@@ -82,7 +82,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
         {'{ }'}
       </button>
       <button className="tbtn" title="Divider" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-        —
+ - 
       </button>
     </div>
   );

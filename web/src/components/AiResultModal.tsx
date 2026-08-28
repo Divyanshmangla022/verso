@@ -161,7 +161,7 @@ export function AiResultModal({
         Result {engine && <span className="badge ai">✨ {engine}</span>} {running && <span className="spinner sm" />}
       </p>
       <div className="ai-output" aria-live="polite">
-        {output || (running ? 'Thinking…' : '')}
+        {output || (running ? 'Thinking...' : '')}
       </div>
       {note && <div className="ai-note">{note}</div>}
       {error && <p className="error-text">{error}</p>}

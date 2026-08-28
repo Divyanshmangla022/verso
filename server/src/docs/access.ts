@@ -16,7 +16,7 @@ export interface DocWithAccess {
 
 /**
  * Load a document and assert the user holds at least the required access.
- * 404s on a malformed/unknown id; 403s when the doc exists but access is missing —
+ * 404s on a malformed/unknown id; 403s when the doc exists but access is missing - 
  * every document route funnels through this, so authorization is enforced
  * server-side rather than by UI visibility.
  */

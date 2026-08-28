@@ -5,7 +5,7 @@ import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
 import type { AiAction, DocDetail, PMNode } from '@verso/shared';
-import { api, ApiRequestError } from '../api';
+import { aiApi, api, ApiRequestError } from '../api';
 import { useAuth } from '../auth';
 import { AiResultModal, type AiSelection } from '../components/AiResultModal';
 import { AiPanel } from '../components/AiPanel';
@@ -17,13 +17,13 @@ import { initials, ToastProvider, useToast } from '../components/ui';
 
 /**
  * Save state machine:
- *  saved    — editor content matches the server
- *  dirty    — local changes await the debounced autosave
- *  saving   — a PUT is in flight
- *  error    — transient failure; dirty is preserved and a retry is scheduled
- *  conflict — server moved past baseVersion; autosave halts, banner offers reload;
+ *  saved - editor content matches the server
+ *  dirty - local changes await the debounced autosave
+ *  saving - a PUT is in flight
+ *  error - transient failure; dirty is preserved and a retry is scheduled
+ *  conflict - server moved past baseVersion; autosave halts, banner offers reload;
  *             local edits stay in the editor (and keep the unload warning) until then
- *  denied   — access was revoked mid-session; editor flips to read-only
+ *  denied - access was revoked mid-session; editor flips to read-only
  */
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict' | 'denied';
 type Panel = 'ai' | 'attachments' | 'history' | null;
@@ -53,6 +53,8 @@ function EditorInner() {
   const [showExport, setShowExport] = useState(false);
   const [aiSelection, setAiSelection] = useState<AiSelection | null>(null);
   const [title, setTitle] = useState('');
+  const [titleIdeas, setTitleIdeas] = useState<string[] | null>(null);
+  const [titleBusy, setTitleBusy] = useState(false);
   const [maxUploadMb, setMaxUploadMb] = useState(10);
 
   const versionRef = useRef(0);
@@ -69,7 +71,7 @@ function EditorInner() {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
-      Placeholder.configure({ placeholder: 'Start writing, or select text for AI actions…' }),
+      Placeholder.configure({ placeholder: 'Start writing, or select text for AI actions...' }),
     ],
     editable: false,
     onUpdate: () => {
@@ -251,6 +253,31 @@ function EditorInner() {
     }
   };
 
+  const suggestTitles = async () => {
+    setTitleBusy(true);
+    setTitleIdeas(null);
+    try {
+      const result = await aiApi.suggestTitles(id);
+      setTitleIdeas(result.titles);
+    } catch (err) {
+      toast.show(err instanceof Error ? err.message : 'Could not suggest titles', 'error');
+    } finally {
+      setTitleBusy(false);
+    }
+  };
+
+  const applyTitle = async (t: string) => {
+    setTitleIdeas(null);
+    if (!doc) return;
+    try {
+      await api.renameDoc(doc.id, t);
+      setTitle(t);
+      setDoc({ ...doc, title: t });
+    } catch (err) {
+      toast.show(err instanceof Error ? err.message : 'Rename failed', 'error');
+    }
+  };
+
   const openAi = (action: AiAction) => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
@@ -280,9 +307,9 @@ function EditorInner() {
 
   const statusLabel: Record<SaveState, string> = {
     saved: 'All changes saved',
-    dirty: 'Unsaved changes…',
-    saving: 'Saving…',
-    error: 'Save failed — retrying',
+    dirty: 'Unsaved changes...',
+    saving: 'Saving...',
+    error: 'Save failed - retrying',
     conflict: 'Version conflict',
     denied: 'Access changed',
   };
@@ -306,6 +333,32 @@ function EditorInner() {
           }}
           aria-label="Document title"
         />
+        {!readOnly && (
+          <div style={{ position: 'relative' }}>
+            <button className="btn ghost sm" title="Suggest a title with AI" onClick={() => void suggestTitles()} disabled={titleBusy}>
+              {titleBusy ? <span className="spinner sm" /> : '✨'}
+            </button>
+            {titleIdeas && (
+              <div
+                style={{
+                  position: 'absolute', left: 0, top: '115%', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--shadow-lg)',
+                  padding: 6, zIndex: 80, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 260,
+                }}
+              >
+                <span className="muted" style={{ padding: '2px 6px' }}>Suggested titles</span>
+                {titleIdeas.map((t) => (
+                  <button key={t} className="btn ghost sm" style={{ justifyContent: 'flex-start', textAlign: 'left' }} onClick={() => void applyTitle(t)}>
+                    {t}
+                  </button>
+                ))}
+                <button className="btn ghost sm" style={{ color: 'var(--text-faint)' }} onClick={() => setTitleIdeas(null)}>
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <span className={`badge ${doc.myRole}`}>{doc.myRole}</span>
         {!readOnly && <span className={`save-status ${saveState === 'conflict' || saveState === 'error' || saveState === 'denied' ? 'error' : ''}`}>{statusLabel[saveState]}</span>}
         <div className="spacer" />
@@ -344,14 +397,14 @@ function EditorInner() {
         <button className={`btn sm ${panel === 'ai' ? 'primary' : ''}`} title="AI assistant" onClick={() => setPanel((p) => (p === 'ai' ? null : 'ai'))}>
           ✨ AI
         </button>
-        <span className="avatar" title={`${user?.name} — click to sign out`} style={{ cursor: 'pointer' }} onClick={logout}>
+        <span className="avatar" title={`${user?.name} - click to sign out`} style={{ cursor: 'pointer' }} onClick={logout}>
           {initials(user?.name ?? '?')}
         </span>
       </header>
 
       {saveState === 'conflict' && (
         <div className="conflict-banner">
-          This document was changed elsewhere. Your latest edits are only in this view — copy anything important, then
+          This document was changed elsewhere. Your latest edits are only in this view - copy anything important, then
           <button className="btn sm" onClick={() => void reloadLatest()}>
             Load latest version
           </button>
@@ -359,7 +412,7 @@ function EditorInner() {
       )}
       {saveState === 'denied' && (
         <div className="conflict-banner">
-          Your access to this document changed — it is now read-only here. Copy any unsaved work before leaving.
+          Your access to this document changed - it is now read-only here. Copy any unsaved work before leaving.
         </div>
       )}
       {doc.myRole === 'viewer' && (
@@ -443,7 +496,7 @@ function EditorInner() {
           onClose={() => setAiSelection(null)}
         />
       )}
-      {showExport && <div style={{ position: 'fixed', inset: 0, zIndex: 70 }} onClick={() => setShowExport(false)} />}
+      {showExport && <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setShowExport(false)} />}
     </div>
   );
 }

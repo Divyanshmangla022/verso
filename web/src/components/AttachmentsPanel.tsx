@@ -75,7 +75,7 @@ export function AttachmentsPanel({
         {canEdit && (
           <>
             <button className="btn" onClick={() => fileRef.current?.click()} disabled={busy}>
-              {busy ? 'Uploading…' : '⬆ Attach a file'}
+              {busy ? 'Uploading...' : '⬆ Attach a file'}
             </button>
             <p className="muted" style={{ margin: '6px 0 14px' }}>
               Any file type, up to {maxUploadMb} MB.

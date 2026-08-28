@@ -54,12 +54,12 @@ export async function connectDb(uri: string = config.mongoUri): Promise<Db> {
 }
 
 export function getDb(): Db {
-  if (!db) throw new Error('Database not connected — call connectDb() first');
+  if (!db) throw new Error('Database not connected - call connectDb() first');
   return db;
 }
 
 export function getBucket(): GridFSBucket {
-  if (!bucket) throw new Error('Database not connected — call connectDb() first');
+  if (!bucket) throw new Error('Database not connected - call connectDb() first');
   return bucket;
 }
 

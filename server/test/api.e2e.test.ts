@@ -1,7 +1,7 @@
 /**
  * End-to-end API tests. Runs the real Express app against a throwaway MongoDB:
- *   - MONGODB_TEST_URI if set (e.g. the docker-compose mongo), else
- *   - an in-memory mongod from mongodb-memory-server (downloaded on first run).
+ * - MONGODB_TEST_URI if set (e.g. the docker-compose mongo), else
+ * - an in-memory mongod from mongodb-memory-server (downloaded on first run).
  *
  * Run: npm test -w server
  */

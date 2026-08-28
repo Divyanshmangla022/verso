@@ -8,7 +8,7 @@ import { assertZipWithinLimits } from './zipGuard.ts';
 import { textToDoc, validateContent } from '../pm/content.ts';
 
 /**
- * Supported import formats. Advertised in the UI upload dialog and README —
+ * Supported import formats. Advertised in the UI upload dialog and README - 
  * keep the three in sync (the client reads this list from /api/meta).
  */
 export const SUPPORTED_IMPORTS = ['.txt', '.md', '.docx'] as const;
@@ -52,7 +52,7 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
         }
         for (const m of result.messages.slice(0, 3)) warnings.push(m.message);
       } catch {
-        throw badRequest('Could not read this .docx file — it may be corrupted or not a real Word document');
+        throw badRequest('Could not read this .docx file - it may be corrupted or not a real Word document');
       }
       content = sanitizeGenerated(generateJSON(html, extensions));
       break;

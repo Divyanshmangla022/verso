@@ -59,7 +59,7 @@ export function ShareDialog({
   };
 
   return (
-    <Modal title={`Share “${docTitle}”`} onClose={onClose}>
+    <Modal title={`Share "${docTitle}"`} onClose={onClose}>
       <form onSubmit={grant} style={{ display: 'flex', gap: 8 }}>
         <input
           className="input"

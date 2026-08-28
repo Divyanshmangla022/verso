@@ -8,7 +8,7 @@ import { asyncRoute, parseBody } from '../http/errors.ts';
 import { rateLimit } from '../http/rateLimit.ts';
 import { config } from '../config.ts';
 import { docToText } from '../pm/content.ts';
-import { runAsk, runAssist, runSummarize, type AiRun } from './engine.ts';
+import { runAsk, runAssist, runSummarize, runTitleSuggest, type AiRun } from './engine.ts';
 
 const assistSchema = z.object({
   docId: z.string().min(1),
@@ -66,7 +66,7 @@ async function streamRun(res: Response, run: AiRun): Promise<void> {
   }
 }
 
-// POST /api/ai/assist — transform a selected passage (rewrite/shorten/expand/grammar/tone).
+// POST /api/ai/assist - transform a selected passage (rewrite/shorten/expand/grammar/tone).
 aiRouter.post(
   '/assist',
   asyncRoute(async (req, res) => {
@@ -78,7 +78,7 @@ aiRouter.post(
   }),
 );
 
-// POST /api/ai/summarize — summarize the whole document.
+// POST /api/ai/summarize - summarize the whole document.
 aiRouter.post(
   '/summarize',
   asyncRoute(async (req, res) => {
@@ -90,7 +90,7 @@ aiRouter.post(
   }),
 );
 
-// POST /api/ai/ask — grounded Q&A over the document content.
+// POST /api/ai/ask - grounded Q&A over the document content.
 aiRouter.post(
   '/ask',
   asyncRoute(async (req, res) => {
@@ -99,5 +99,17 @@ aiRouter.post(
     const { doc } = await requireDocAccess(user._id, body.docId, 'viewer');
     const run = await runAsk(doc.title, docToText(doc.content), body.question);
     await streamRun(res, run);
+  }),
+);
+
+// POST /api/ai/title - suggest 3 titles for the document (JSON, not streamed).
+aiRouter.post(
+  '/title',
+  asyncRoute(async (req, res) => {
+    const user = currentUser(req);
+    const body = parseBody(summarizeSchema, req.body);
+    const { doc } = await requireDocAccess(user._id, body.docId, 'viewer');
+    const result = await runTitleSuggest(doc.title, docToText(doc.content));
+    res.json(result);
   }),
 );

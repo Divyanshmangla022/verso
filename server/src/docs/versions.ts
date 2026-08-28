@@ -5,7 +5,7 @@ import { versions } from '../db.ts';
 
 /**
  * Record a committed revision. Called AFTER a successful versioned write, so
- * each snapshot carries the version/content/user/time of the save itself —
+ * each snapshot carries the version/content/user/time of the save itself - 
  * history rows are attributed to the person who actually made that revision.
  */
 export async function recordRevision(params: {

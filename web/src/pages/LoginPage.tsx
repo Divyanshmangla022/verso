@@ -44,7 +44,7 @@ export function LoginPage() {
       await login(demoEmail, DEMO_PASSWORD);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Demo login failed — has the database been seeded?');
+      setError(err instanceof Error ? err.message : 'Demo login failed - has the database been seeded?');
     } finally {
       setBusy(false);
     }
@@ -94,7 +94,7 @@ export function LoginPage() {
           </label>
           {error && <p className="error-text">{error}</p>}
           <button className="btn primary" style={{ width: '100%', justifyContent: 'center', marginTop: 6 }} disabled={busy}>
-            {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
+            {busy ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
 

@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './auth';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 
-// The editor bundles TipTap/ProseMirror — split it so login/dashboard stay light.
+// The editor bundles TipTap/ProseMirror - split it so login/dashboard stay light.
 const EditorPage = lazy(() => import('./pages/EditorPage').then((m) => ({ default: m.EditorPage })));
 
 function Loading() {

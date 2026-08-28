@@ -19,6 +19,19 @@ export function createApp(): Express {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '3mb' }));
 
+  // Security headers (single-origin SPA + API; inline styles allowed for React style props).
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    );
+    next();
+  });
+
   // Minimal CORS: only needed for the Vite dev server; prod serves web from this process.
   app.use((req: Request, res: Response, next: NextFunction) => {
     const origin = req.headers.origin;

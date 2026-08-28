@@ -217,3 +217,25 @@ describe('rate limiter middleware', () => {
     assert.equal(await run(), 429);
   });
 });
+
+describe('AI title suggestions', () => {
+  it('returns up to 3 titles and enforces access', async () => {
+    const owner = await registerUser('title@test.dev', 'Title Owner');
+    const outsider = await registerUser('title-out@test.dev', 'Title Outsider');
+    const created = await call<{ id: string }>('POST', '/api/docs', { token: owner.token, body: { title: 'Titles' } });
+    const docId = created.body.id;
+    await call('PUT', `/api/docs/${docId}/content`, {
+      token: owner.token,
+      body: { content: docWith('Quarterly revenue review for the leadership sync.'), baseVersion: 1 },
+    });
+    const res = await call<{ engine: string; titles: string[] }>('POST', '/api/ai/title', {
+      token: owner.token,
+      body: { docId },
+    });
+    assert.equal(res.status, 200);
+    assert.ok(['gemini', 'heuristic'].includes(res.body.engine));
+    assert.ok(res.body.titles.length >= 1 && res.body.titles.length <= 3);
+    const denied = await call('POST', '/api/ai/title', { token: outsider.token, body: { docId } });
+    assert.equal(denied.status, 403);
+  });
+});

@@ -118,7 +118,7 @@ function DashboardInner() {
           <>
             <h2>My documents</h2>
             {docs.owned.length === 0 ? (
-              <div className="empty">No documents yet — create one or import a file to get started.</div>
+              <div className="empty">No documents yet - create one or import a file to get started.</div>
             ) : (
               <div className="doc-grid">
                 {docs.owned.map((d) => (
@@ -179,7 +179,7 @@ function DashboardInner() {
           }
         >
           <p style={{ margin: 0 }}>
-            “{deleting.title}” and its attachments, shares, and version history will be permanently deleted
+            "{deleting.title}" and its attachments, shares, and version history will be permanently deleted
             {deleting.sharedWithCount > 0 ? ` for you and ${deleting.sharedWithCount} collaborator${deleting.sharedWithCount > 1 ? 's' : ''}` : ''}.
           </p>
         </Modal>

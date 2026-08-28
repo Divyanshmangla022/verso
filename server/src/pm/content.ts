@@ -4,7 +4,7 @@ import { badRequest } from '../http/errors.ts';
 
 /**
  * The document schema the product supports. Mirrors the client editor's
- * StarterKit configuration — content that the editor cannot render is
+ * StarterKit configuration - content that the editor cannot render is
  * rejected at the API boundary rather than stored blindly.
  */
 const NODE_TYPES = new Set([
@@ -13,7 +13,7 @@ const NODE_TYPES = new Set([
 ]);
 const MARK_TYPES = new Set(['bold', 'italic', 'underline', 'strike', 'code', 'link']);
 
-/** Protocols a link mark may carry. Anything else (javascript:, data:, …) is stripped. */
+/** Protocols a link mark may carry. Anything else (javascript:, data:, ...) is stripped. */
 const SAFE_LINK = /^(https?:|mailto:|tel:|\/|#)/i;
 
 const MAX_CONTENT_BYTES = 2 * 1024 * 1024; // 2 MB of JSON per document
@@ -127,7 +127,7 @@ export function wordCount(node: PMNode): number {
  * Serialize a document to GitHub-flavored Markdown for export.
  * Blocks are serialized independently and joined with exactly one blank line,
  * so code-block content (which may legitimately contain blank lines) is
- * never rewritten. Underline has no Markdown syntax and exports as <u>…</u>
+ * never rewritten. Underline has no Markdown syntax and exports as <u>...</u>
  * (HTML passthrough, standard in GFM).
  */
 export function docToMarkdown(node: PMNode): string {
@@ -162,7 +162,7 @@ function blockToMarkdown(n: PMNode, indent: string): string {
         .join('\n');
     case 'codeBlock': {
       const lang = typeof n.attrs?.language === 'string' ? n.attrs.language : '';
-      const code = rawText(n); // verbatim — no escaping, no normalization
+      const code = rawText(n); // verbatim - no escaping, no normalization
       return indent + '```' + lang + '\n' + code + '\n' + indent + '```';
     }
     case 'horizontalRule':
