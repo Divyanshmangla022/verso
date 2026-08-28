@@ -4,7 +4,8 @@ Verso is a Google-Docs-inspired document editor built for the Ajaia full-stack
 assignment: rich-text editing, file import, attachments, sharing with roles,
 version history, and an integrated AI writing layer - all persisted in MongoDB.
 
-**Live demo:** see `SUBMISSION.md` for the deployed URL and demo credentials.
+**Source:** https://github.com/Divyanshmangla022/verso
+**Live demo:** _pending - filled in after the Render deploy (see `SUBMISSION.md` for the URL and demo credentials)_
 
 ## Feature summary
 

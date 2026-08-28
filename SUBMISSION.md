@@ -16,6 +16,10 @@ AI-Native Full Stack Developer assignment.
 | Screenshots of every major flow | `docs/screenshots/` |
 | This manifest | `SUBMISSION.md` |
 
+## Source
+
+https://github.com/Divyanshmangla022/verso (public)
+
 ## Live deployment
 
 - **URL:** _<fill in after deploy - see docs/DEPLOYMENT.md>_
