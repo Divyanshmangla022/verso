@@ -29,7 +29,7 @@ chose four deep slices and cut everything else deliberately:
 4. **An AI layer that degrades honestly.** Rewrite/shorten/expand/grammar/
    tone on a selection, plus summarize and grounded Q&A per document - all
    streamed over SSE. With `GEMINI_API_KEY` set it uses Gemini
-   (`gemini-2.5-flash`); without a key every flow still works through a
+   (`gemini-3.6-flash`); without a key every flow still works through a
    clearly-labeled heuristic engine (extractive summary, rule-based grammar
    cleanup, keyword-matched Q&A). Reviewers can exercise the whole product
    with zero paid dependencies, and the UI badges which engine answered.

@@ -52,7 +52,7 @@ export const config = {
   maxUploadMb: int('MAX_UPLOAD_MB', 10),
   maxVersionsPerDoc: int('MAX_VERSIONS_PER_DOC', 20),
   geminiApiKey: process.env.GEMINI_API_KEY ?? '',
-  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.6-flash',
   /** Max characters of document text sent to the AI layer per request. */
   aiContextCharLimit: int('AI_CONTEXT_CHAR_LIMIT', 60_000),
   bcryptRounds: int('BCRYPT_ROUNDS', 10),

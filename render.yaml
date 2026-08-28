@@ -19,4 +19,4 @@ services:
       - key: GEMINI_API_KEY
         sync: false # optional - leave empty for heuristic AI mode
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.6-flash

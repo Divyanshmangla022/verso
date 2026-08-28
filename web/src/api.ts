@@ -235,7 +235,7 @@ async function streamSse(path: string, body: unknown, handlers: AiStreamHandlers
         if (event.type === 'meta') handlers.onMeta?.(event);
         else if (event.type === 'chunk') handlers.onChunk(event.text);
         else if (event.type === 'done') handlers.onDone?.();
-        else if (event.type === 'error') handlers.onError?.(event.message);
+        else if (event.type === 'error') handlers.onError?.(event.reason ? `${event.message} (${event.reason})` : event.message);
       }
     }
   } catch (err) {

@@ -37,22 +37,67 @@ export async function geminiAvailable(): Promise<boolean> {
   return Boolean(config.geminiApiKey) && (await loadGenAi()) !== null;
 }
 
+// Google retires model ids on its own schedule (and differently per region /
+// account age), so a configured model can vanish underneath a deployment.
+// When the API says a model is unavailable, switch to the one it recommends
+// (or a known-good default) and remember the choice for the process lifetime.
+const FALLBACK_MODEL = 'gemini-3.6-flash';
+let activeModel: string | null = null;
+
+export function currentModel(): string {
+  return activeModel ?? config.geminiModel;
+}
+
+function modelUnavailable(err: unknown): boolean {
+  return /NOT_FOUND|no longer available|not found|is not supported for/i.test(describeAiError(err));
+}
+
+function recommendedModel(err: unknown): string {
+  const m = (err instanceof Error ? err.message : String(err)).match(/use\s+models\/([\w.-]+)/i);
+  return m?.[1] ?? FALLBACK_MODEL;
+}
+
+async function withModel<T>(fn: (model: string) => Promise<T>): Promise<T> {
+  const model = currentModel();
+  try {
+    return await fn(model);
+  } catch (err) {
+    if (!modelUnavailable(err)) throw err;
+    const next = recommendedModel(err);
+    if (next === model) throw err;
+    console.warn(`Gemini model "${model}" unavailable here; switching to "${next}"`);
+    activeModel = next;
+    return fn(next);
+  }
+}
+
+/** Keep reasoning minimal for writing tasks - fast, cheap, and it keeps
+ *  maxOutputTokens for the answer. 2.5-era models take a budget; newer ones
+ *  take a level (a budget of 0 is rejected there). */
+function thinkingFor(mod: GenAiModule, model: string): Record<string, unknown> {
+  if (/^gemini-2\.5/.test(model)) return { thinkingConfig: { thinkingBudget: 0 } };
+  return { thinkingConfig: { thinkingLevel: mod.ThinkingLevel.MINIMAL } };
+}
+
 async function* geminiStream(systemInstruction: string, prompt: string, signal?: AbortSignal): AsyncIterable<string> {
   const mod = await loadGenAi();
   if (!mod) throw new Error('@google/genai is not installed');
   const client = new mod.GoogleGenAI({ apiKey: config.geminiApiKey });
-  const stream = await client.models.generateContentStream({
-    model: config.geminiModel,
-    contents: prompt,
-    config: {
-      systemInstruction,
-      temperature: 0.4,
-      maxOutputTokens: 2048,
-      // Cancels the upstream call when the client disconnects or the
-      // per-request timeout fires - no orphaned billable streams.
-      ...(signal ? { abortSignal: signal } : {}),
-    },
-  });
+  const stream = await withModel((model) =>
+    client.models.generateContentStream({
+      model,
+      contents: prompt,
+      config: {
+        systemInstruction,
+        temperature: 0.4,
+        maxOutputTokens: 2048,
+        ...thinkingFor(mod, model),
+        // Cancels the upstream call when the client disconnects or the
+        // per-request timeout fires - no orphaned billable streams.
+        ...(signal ? { abortSignal: signal } : {}),
+      },
+    }),
+  );
   for await (const chunk of stream) {
     const text = chunk.text;
     if (text) yield text;
@@ -202,7 +247,7 @@ export async function runAssist(input: AssistInput, signal?: AbortSignal): Promi
   if (await geminiAvailable()) {
     return {
       engine: 'gemini',
-      model: config.geminiModel,
+      model: currentModel(),
       stream: geminiStream(ASSIST_SYSTEM, assistPrompt({ ...input, text: clip(input.text) }), signal),
     };
   }
@@ -215,7 +260,7 @@ export async function runSummarize(docTitle: string, docText: string, signal?: A
   }
   if (await geminiAvailable()) {
     const prompt = `Document title: ${docTitle}\n\nDocument content:\n"""\n${clip(docText)}\n"""`;
-    return { engine: 'gemini', model: config.geminiModel, stream: geminiStream(SUMMARY_SYSTEM, prompt, signal) };
+    return { engine: 'gemini', model: currentModel(), stream: geminiStream(SUMMARY_SYSTEM, prompt, signal) };
   }
   return heuristicSummary(docText);
 }
@@ -259,14 +304,16 @@ export async function checkAi(): Promise<AiStatus> {
   if (!mod) return { engine: 'heuristic', ok: true };
   try {
     const client = new mod.GoogleGenAI({ apiKey: config.geminiApiKey });
-    const r = await client.models.generateContent({
-      model: config.geminiModel,
-      contents: 'Reply with the single word: ok',
-      config: { maxOutputTokens: 16, thinkingConfig: { thinkingBudget: 0 }, abortSignal: AbortSignal.timeout(20_000) },
-    });
-    return { engine: 'gemini', model: config.geminiModel, ok: typeof r.text === 'string' && r.text.length > 0 };
+    const r = await withModel((model) =>
+      client.models.generateContent({
+        model,
+        contents: 'Reply with the single word: ok',
+        config: { maxOutputTokens: 32, ...thinkingFor(mod, model), abortSignal: AbortSignal.timeout(20_000) },
+      }),
+    );
+    return { engine: 'gemini', model: currentModel(), ok: typeof r.text === 'string' && r.text.length > 0 };
   } catch (err) {
-    return { engine: 'gemini', model: config.geminiModel, ok: false, reason: describeAiError(err) };
+    return { engine: 'gemini', model: currentModel(), ok: false, reason: describeAiError(err) };
   }
 }
 
@@ -292,17 +339,19 @@ export async function runTitleSuggest(docTitle: string, docText: string): Promis
   if (!mod) return heuristicTitles(docTitle, docText);
   try {
     const client = new mod.GoogleGenAI({ apiKey: config.geminiApiKey });
-    const response = await client.models.generateContent({
-      model: config.geminiModel,
-      contents: 'Current title: ' + docTitle + '\n\nDocument content:\n' + FENCE + '\n' + clip(docText) + '\n' + FENCE,
-      config: {
-        systemInstruction: TITLE_SYSTEM,
-        temperature: 0.7,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: 0 },
-        responseMimeType: 'application/json',
-      },
-    });
+    const response = await withModel((model) =>
+      client.models.generateContent({
+        model,
+        contents: 'Current title: ' + docTitle + '\n\nDocument content:\n' + FENCE + '\n' + clip(docText) + '\n' + FENCE,
+        config: {
+          systemInstruction: TITLE_SYSTEM,
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+          ...thinkingFor(mod, model),
+          responseMimeType: 'application/json',
+        },
+      }),
+    );
     const parsed = JSON.parse(response.text ?? '') as { titles?: unknown };
     const titles = Array.isArray(parsed.titles)
       ? parsed.titles
@@ -324,7 +373,7 @@ export async function runAsk(docTitle: string, docText: string, question: string
   }
   if (await geminiAvailable()) {
     const prompt = `Document title: ${docTitle}\n\nDocument content:\n"""\n${clip(docText)}\n"""\n\nQuestion: ${question}`;
-    return { engine: 'gemini', model: config.geminiModel, stream: geminiStream(ASK_SYSTEM, prompt, signal) };
+    return { engine: 'gemini', model: currentModel(), stream: geminiStream(ASK_SYSTEM, prompt, signal) };
   }
   return heuristicAsk(docText, question);
 }
