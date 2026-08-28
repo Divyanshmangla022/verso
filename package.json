@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Verso - a collaborative document editor with an AI writing layer",
   "type": "module",
-  "engines": { "node": ">=22.6.0" },
+  "engines": { "node": ">=24.0.0" },
   "workspaces": ["shared", "server", "web"],
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",

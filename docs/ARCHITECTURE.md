@@ -45,7 +45,7 @@ chose four deep slices and cut everything else deliberately:
 | **TipTap 3 (ProseMirror)** | Production-grade editing semantics (marks, history, lists, keyboard shortcuts) without building an editor from scratch; its JSON output is the persistence format. |
 | **React 19 + Vite** | Editor page is code-split (~148 KB gz lazy chunk) so login/dashboard stay light (~79 KB gz). |
 | **JWT + bcryptjs** | Stateless auth that works on a single free dyno; login compares against a constant-time dummy hash on unknown emails to avoid account-existence timing leaks. |
-| **node:test + mongodb-memory-server** | 27 E2E tests run the real HTTP app against a real (throwaway) MongoDB - no mocking of the layers under test. |
+| **node:test + mongodb-memory-server** | 37 E2E tests run the real HTTP app against a real (throwaway) MongoDB - no mocking of the layers under test. |
 
 One process serves both the API and the built SPA in production - the
 cheapest thing to deploy, the fewest CORS problems, one URL for reviewers.

@@ -58,9 +58,9 @@ documents, rich-text editing, autosave with conflict detection, rename,
 import (.txt/.md/.docx), attachments, sharing with editor/viewer roles,
 owned/shared dashboard split, version history + restore, Markdown/TXT
 export, streaming AI (rewrite/shorten/expand/grammar/tone/summarize/ask)
-with graceful no-key fallback, 27 passing E2E API tests, Dockerized deploy.
+with graceful no-key fallback, 37 passing E2E API tests, Dockerized deploy.
 
 **Intentionally not built (scope cuts, reasoning in the architecture note):**
 real-time multiplayer cursors/CRDT editing, comments/suggestions, folders &
 search, password reset. **Next 2-4 hours:** presence indicators, PDF export,
-AI document restructuring, rate limiting.
+AI document restructuring, comment threads.

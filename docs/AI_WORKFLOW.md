@@ -16,7 +16,7 @@ rejected, and how correctness was verified.
   layer, TipTap editor wiring, SSE streaming client, CSS system - was
   drafted quickly enough to leave real time for verification, which is
   where the actual engineering judgment went.
-- **The test suite.** 27 end-to-end API tests (auth, permission matrix,
+- **The test suite.** 37 end-to-end API tests (auth, permission matrix,
   concurrency conflicts, import, attachments, versions, AI SSE) were
   generated against the real app and then tightened by hand - writing these
   manually would have consumed a large share of the timebox.
@@ -50,7 +50,7 @@ rejected, and how correctness was verified.
 
 ## How correctness, UX quality, and reliability were verified
 
-1. **Automated:** `npm test` (27 E2E API tests) and strict `tsc` across all
+1. **Automated:** `npm test` (37 E2E API tests) and strict `tsc` across all
    three workspaces on every change; `npm audit` clean; the production
    Docker image is built and smoke-tested (health, login, SPA serving)
    before deploy.

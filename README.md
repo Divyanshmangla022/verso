@@ -12,7 +12,7 @@ version history, and an integrated AI writing layer - all persisted in MongoDB.
 |---|---|
 | Documents | Create, rename (inline + dashboard), edit, autosave, reopen, delete |
 | Rich text | Bold, italic, underline, strikethrough, inline code, H1-H3, bulleted & numbered lists, quotes, code blocks, dividers, undo/redo |
-| File upload | Import `.txt`, `.md`, `.docx` as a new editable document (limits shown in the UI); attach **any** file type to a document (10 MB cap, stored in GridFS) |
+| File upload | Import `.txt`, `.md`, `.docx` as a new editable document (10 MB cap, stated in the UI); attach **any** file type to a document (10 MB cap, stored in GridFS) |
 | Sharing | Owner grants access by email as **editor** or **viewer**; role changes and revocation; dashboard splits **My documents** / **Shared with me**; all rules enforced server-side |
 | Persistence | MongoDB; content stored as ProseMirror JSON so formatting round-trips exactly; optimistic concurrency (409 + reload banner on conflicting saves) |
 | Version history | Snapshot on every save (capped at 20), preview metadata, one-click restore |
@@ -23,7 +23,7 @@ Supported import types: **`.txt`, `.md`, `.docx`** (stated in the upload UI as w
 
 ## Run locally
 
-Prerequisites: **Node.js ≥ 22.6** (developed on Node 26 - the server runs
+Prerequisites: **Node.js 24+** (developed on Node 26 - the server runs
 TypeScript natively, no build step) and **Docker** (for MongoDB) *or* any
 MongoDB ≥ 6 on `localhost:27017`.
 
@@ -62,7 +62,7 @@ docker run -p 4000:4000 -e MONGODB_URI=<uri> -e JWT_SECRET=<24+ chars> verso
 ## Tests
 
 ```bash
-npm test             # 27 end-to-end API tests (node:test)
+npm test             # 37 end-to-end API tests (node:test)
 ```
 
 The suite boots the real Express app against a throwaway MongoDB
