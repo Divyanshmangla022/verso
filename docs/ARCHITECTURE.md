@@ -124,3 +124,16 @@ Deliberate residual tradeoff: registration and share-by-email reveal
 whether an account exists. For an internal collaboration tool this is the
 intended UX ("no account for x@y - ask them to register"), and the auth
 rate limiter blunts bulk enumeration.
+
+## AI misuse containment
+
+The AI endpoints are product tools, not a general LLM proxy. Two layers
+enforce that. Structural: every call requires an authenticated account and
+access to a real document, actions and tones are server-validated enums,
+selections/questions/context/output are all capped, and each user gets 60
+AI calls per 5 minutes. Behavioral: every system prompt pins the document
+text as untrusted data AND task-locks the model as a writing tool - probed
+live: "expand" on an essay request expands the request sentence instead of
+writing the essay, "rewrite" on a code request produces prose not code, and
+off-document questions get "I can only answer questions about this
+document." Worst-case spend per user is therefore bounded and on-task.
