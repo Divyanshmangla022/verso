@@ -6,12 +6,16 @@
   "type": "module",
   "engines": { "node": ">=24.0.0" },
   "workspaces": ["shared", "server", "web"],
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  },
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
+    "dev": "node scripts/dev.mjs",
     "build": "npm run build -w web",
     "start": "npm run start -w server",
     "seed": "npm run seed -w server",
     "test": "npm run test -w server",
+    "qa": "node scripts/qa.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:up": "docker compose up -d mongo",
     "db:down": "docker compose down"

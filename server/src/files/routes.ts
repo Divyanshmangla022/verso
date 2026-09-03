@@ -9,6 +9,7 @@ import { config } from '../config.ts';
 import { documents, getBucket, toObjectId, users, type DocumentDoc } from '../db.ts';
 import { requireDocAccess } from '../docs/access.ts';
 import { asyncRoute, badRequest, notFound, pathParam } from '../http/errors.ts';
+import { rateLimit } from '../http/rateLimit.ts';
 import { importFile, SUPPORTED_IMPORTS } from './importers.ts';
 import { recordRevision } from '../docs/versions.ts';
 
@@ -16,10 +17,18 @@ import { recordRevision } from '../docs/versions.ts';
 function decodeFilename(name: string): string {
   try {
     const decoded = Buffer.from(name, 'latin1').toString('utf8');
-    return decoded.includes('FFFD') ? name : decoded;
+    // U+FFFD in the result means those bytes were not UTF-8 (e.g. a client that
+    // sent RFC 5987 filename*, which busboy already decoded) - keep the original.
+    return decoded.includes('\uFFFD') ? name : decoded;
   } catch {
     return name;
   }
+}
+
+/** RFC 6266/5987 disposition: an ASCII fallback plus the real UTF-8 name. */
+function attachmentDisposition(name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_') || 'download';
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
 const upload = multer({
@@ -30,9 +39,20 @@ const upload = multer({
 export const filesRouter = Router();
 filesRouter.use(requireAuth);
 
+// Uploads are buffered in memory before they reach GridFS (and .docx imports are
+// inflated on top of that), so request volume - not just per-file size - decides
+// peak memory. Cap the write paths per user; reads stay unthrottled.
+const uploadLimit = rateLimit({
+  windowMs: 5 * 60_000,
+  max: config.rateLimitUploadMax,
+  keyFor: (req) => req.user?._id.toString() ?? 'anon',
+  message: 'Too many uploads. Try again in a few minutes.',
+});
+
 // POST /api/docs/import - turn an uploaded .txt/.md/.docx into a new editable document.
 filesRouter.post(
   '/docs/import',
+  uploadLimit,
   upload.single('file'),
   asyncRoute(async (req, res) => {
     const user = currentUser(req);
@@ -85,6 +105,7 @@ const attachmentToMeta = async (file: {
 // POST /api/docs/:id/attachments - attach any file to a document (stored in GridFS).
 filesRouter.post(
   '/docs/:id/attachments',
+  uploadLimit,
   upload.single('file'),
   asyncRoute(async (req, res) => {
     const user = currentUser(req);
@@ -106,6 +127,13 @@ filesRouter.post(
       // Abort the half-written GridFS file so no orphan chunks remain.
       await uploadStream.abort().catch(() => undefined);
       throw err;
+    }
+    // The document can be deleted while these bytes are still streaming; the
+    // delete cascade would then miss this file and leave it unreachable forever.
+    const stillExists = await documents().findOne({ _id: doc._id }, { projection: { _id: 1 } });
+    if (!stillExists) {
+      await bucket.delete(uploadStream.id).catch(() => undefined);
+      throw notFound('Document not found');
     }
     const stored = await bucket.find({ _id: uploadStream.id }).next();
     if (!stored) throw notFound('Upload failed');
@@ -137,7 +165,7 @@ filesRouter.get(
     if (!file) throw notFound('Attachment not found');
     res.setHeader('Content-Type', file.metadata?.mimeType ?? 'application/octet-stream');
     res.setHeader('Content-Length', String(file.length));
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.filename)}"`);
+    res.setHeader('Content-Disposition', attachmentDisposition(file.filename));
     bucket.openDownloadStream(fileId).on('error', () => res.destroy()).pipe(res);
   }),
 );

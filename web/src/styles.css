@@ -246,7 +246,9 @@ label.field .input { margin-top: 5px; font-weight: 400; }
 .doc-card .title { font-weight: 600; font-size: 15px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .doc-card .meta { font-size: 12.5px; color: var(--text-faint); margin-top: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .doc-card .card-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.12s; margin-left: auto; }
-.doc-card:hover .card-actions { opacity: 1; }
+/* :focus-within so the actions are visible to keyboard users, not just on hover */
+.doc-card:hover .card-actions,
+.doc-card:focus-within .card-actions { opacity: 1; }
 .icon-btn {
   border: 0; background: transparent; cursor: pointer; border-radius: 6px;
   padding: 4px 6px; font-size: 14px; color: var(--text-faint); line-height: 1; font-family: inherit;
@@ -475,3 +477,57 @@ label.field .input { margin-top: 5px; font-weight: 400; }
   100% { transform: scale(1); }
 }
 .bubble button:active { animation: pop 0.18s ease-out; }
+
+/* ---------- print ("Export -> PDF") ----------
+   The app chrome is dropped and every scroll container is opened up, so the
+   whole document prints rather than the one screenful that is visible. */
+.print-title { display: none; }
+
+@media print {
+  @page { size: auto; margin: 20mm; }
+
+  html, body, #root { height: auto; overflow: visible; background: #fff; }
+
+  /* App chrome has no meaning on paper. */
+  .topbar,
+  .toolbar,
+  .drawer,
+  .bubble,
+  .toast-host,
+  .conflict-banner,
+  .readonly-banner,
+  .overlay { display: none !important; }
+
+  .editor-shell { height: auto; display: block; }
+  .editor-main { display: block; overflow: visible; }
+  .editor-scroll { overflow: visible; padding: 0; }
+  .sheet {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #fff;
+  }
+
+  .print-title {
+    display: block;
+    font-size: 20pt;
+    line-height: 1.25;
+    margin: 0 0 14pt;
+  }
+
+  .ProseMirror {
+    min-height: 0;
+    font-size: 11.5pt;
+    color: #000;
+  }
+  .ProseMirror a { color: inherit; text-decoration: underline; }
+  .ProseMirror pre { white-space: pre-wrap; word-break: break-word; }
+
+  /* Keep blocks intact across page breaks where it matters. */
+  .ProseMirror h1, .ProseMirror h2, .ProseMirror h3 { break-after: avoid; }
+  .ProseMirror pre, .ProseMirror blockquote, .ProseMirror li { break-inside: avoid; }
+  .ProseMirror p { orphans: 2; widows: 2; }
+}

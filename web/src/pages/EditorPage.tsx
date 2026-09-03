@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import type { JSONContent } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
@@ -20,15 +21,19 @@ import { initials, ToastProvider, useToast } from '../components/ui';
  *  saved - editor content matches the server
  *  dirty - local changes await the debounced autosave
  *  saving - a PUT is in flight
- *  error - transient failure; dirty is preserved and a retry is scheduled
+ *  error - transient failure; dirty is preserved and a retry is scheduled with backoff
+ *  rejected - the server refused this content permanently (e.g. too large);
+ *             retrying cannot help, so autosave halts and the reason is shown
  *  conflict - server moved past baseVersion; autosave halts, banner offers reload;
  *             local edits stay in the editor (and keep the unload warning) until then
  *  denied - access was revoked mid-session; editor flips to read-only
  */
-type SaveState = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict' | 'denied';
+type SaveState = 'saved' | 'dirty' | 'saving' | 'error' | 'rejected' | 'conflict' | 'denied';
 type Panel = 'ai' | 'attachments' | 'history' | null;
 
 const AUTOSAVE_DEBOUNCE_MS = 900;
+/** Transient failures back off from the debounce interval up to this ceiling. */
+const MAX_RETRY_DELAY_MS = 30_000;
 
 export function EditorPage() {
   return (
@@ -36,6 +41,33 @@ export function EditorPage() {
       <EditorInner />
     </ToastProvider>
   );
+}
+
+/**
+ * Statuses that mean "this exact body will never be accepted". 408 and 429 are
+ * client errors but explicitly ask for a retry, so they stay transient.
+ */
+function isPermanent(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
+/**
+ * PDF export through the browser's own print pipeline: real selectable text,
+ * working links, every system font - and no headless Chromium on a 512 MB
+ * instance. The print stylesheet in styles.css does the layout work; the title
+ * is borrowed so the browser suggests a sensible filename.
+ */
+function printDocument(title: string): void {
+  const original = document.title;
+  document.title = title || 'document';
+  const restore = () => {
+    document.title = original;
+    window.removeEventListener('afterprint', restore);
+  };
+  window.addEventListener('afterprint', restore);
+  window.print();
+  // Safari fires afterprint unreliably; make sure the tab title comes back.
+  setTimeout(restore, 60_000);
 }
 
 function EditorInner() {
@@ -47,7 +79,11 @@ function EditorInner() {
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [loadError, setLoadError] = useState('');
   const [loadAttempt, setLoadAttempt] = useState(0);
+  // Bumped whenever content is replaced from the server (reload / restore) so the
+  // editor is rebuilt around it instead of the replacement entering the undo stack.
+  const [contentEpoch, setContentEpoch] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>('saved');
+  const [saveError, setSaveError] = useState('');
   const [currentVersion, setCurrentVersion] = useState(0);
   const [panel, setPanel] = useState<Panel>(null);
   const [showShare, setShowShare] = useState(false);
@@ -63,28 +99,46 @@ function EditorInner() {
   const dirtyRef = useRef(false);
   const savingRef = useRef<Promise<void> | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const haltedRef = useRef(false); // true in conflict/denied: no more autosaves
+  const haltedRef = useRef(false); // true in conflict/denied/rejected: no more autosaves
+  const retryDelayRef = useRef(AUTOSAVE_DEBOUNCE_MS);
+  // The document scrolls inside this element, not the window, so the bubble menu
+  // has to watch it or it detaches from the selection as the user scrolls.
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const modalOpenRef = useRef(false);
   modalOpenRef.current = showShare || aiSelection !== null || showExport;
 
   const readOnly = doc ? doc.myRole === 'viewer' || saveState === 'denied' : true;
   const isOwner = doc?.myRole === 'owner';
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
-      Placeholder.configure({ placeholder: 'Start writing, or select text for AI actions...' }),
-    ],
-    editable: false,
-    onUpdate: () => {
-      // Always track dirtiness (so the unload warning stays honest), but only
-      // schedule autosaves while the machine is allowed to save.
-      dirtyRef.current = true;
-      if (haltedRef.current) return;
-      setSaveState((s) => (s === 'saving' ? s : 'dirty'));
-      scheduleSave();
+  /**
+   * The editor is rebuilt whenever the document (or the server copy of its
+   * content) changes, so loaded content is the editor's *initial* state rather
+   * than an edit. Loading through setContent would push the load itself onto the
+   * undo stack, and one Ctrl+Z after opening would blank the document - then
+   * autosave that blank version over everyone else's copy.
+   */
+  const editor = useEditor(
+    {
+      extensions: [
+        StarterKit.configure({ link: { openOnClick: false } }),
+        Placeholder.configure({ placeholder: 'Start writing, or select text for AI actions...' }),
+      ],
+      content: (doc?.content ?? null) as JSONContent | null,
+      editable: doc ? doc.myRole !== 'viewer' : false,
+      onUpdate: ({ transaction }) => {
+        // Only real content edits count. Selection moves and editability changes
+        // also emit updates, and treating those as edits produces phantom saves.
+        if (!transaction.docChanged) return;
+        // Always track dirtiness (so the unload warning stays honest), but only
+        // schedule autosaves while the machine is allowed to save.
+        dirtyRef.current = true;
+        if (haltedRef.current) return;
+        setSaveState((s) => (s === 'saving' ? s : 'dirty'));
+        scheduleSave();
+      },
     },
-  });
+    [doc?.id, contentEpoch],
+  );
 
   // ---- load ----
   useEffect(() => {
@@ -115,16 +169,24 @@ function EditorInner() {
     };
   }, [id, loadAttempt]);
 
-  // Push loaded content into the editor once both exist.
+  // A freshly built editor already holds the loaded content: reset the save
+  // machine around it.
   useEffect(() => {
     if (!editor || !doc) return;
     haltedRef.current = false;
-    editor.commands.setContent(doc.content as never, { emitUpdate: false });
-    editor.setEditable(doc.myRole !== 'viewer');
     dirtyRef.current = false;
+    retryDelayRef.current = AUTOSAVE_DEBOUNCE_MS;
+    setSaveError('');
     setSaveState('saved');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, doc?.id]);
+  }, [editor, doc?.id, contentEpoch]);
+
+  // Keep editability in step with the current role and save state. emitUpdate is
+  // off because toggling editability is not an edit.
+  useEffect(() => {
+    if (!editor) return;
+    editor.setEditable(!readOnly, false);
+  }, [editor, readOnly]);
 
   // ---- autosave ----
   const saveNow = useCallback((): Promise<void> => {
@@ -138,6 +200,7 @@ function EditorInner() {
         const result = await api.saveContent(id, content, versionRef.current);
         versionRef.current = result.version;
         setCurrentVersion(result.version);
+        retryDelayRef.current = AUTOSAVE_DEBOUNCE_MS;
         setSaveState(dirtyRef.current ? 'dirty' : 'saved');
       } catch (err) {
         dirtyRef.current = true; // whatever happened, this content is not on the server
@@ -147,14 +210,22 @@ function EditorInner() {
         } else if (err instanceof ApiRequestError && (err.status === 403 || err.status === 404)) {
           haltedRef.current = true;
           setSaveState('denied');
-          editor.setEditable(false);
+          editor.setEditable(false, false);
+        } else if (err instanceof ApiRequestError && isPermanent(err.status)) {
+          // The server will never accept this body (too large, invalid): stop
+          // resending it every second and tell the user what is wrong.
+          haltedRef.current = true;
+          setSaveError(err.message);
+          setSaveState('rejected');
         } else {
+          // Transient (network, 5xx, 429): retry, backing off so an outage does
+          // not turn every open editor into a request loop.
+          retryDelayRef.current = Math.min(MAX_RETRY_DELAY_MS, retryDelayRef.current * 2);
           setSaveState('error');
-          scheduleSave(); // transient: retry
         }
       } finally {
         savingRef.current = null;
-        if (dirtyRef.current && !haltedRef.current) scheduleSave();
+        if (dirtyRef.current && !haltedRef.current) scheduleSave(retryDelayRef.current);
       }
     })();
     savingRef.current = flight;
@@ -162,10 +233,26 @@ function EditorInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, id]);
 
-  const scheduleSave = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void saveNow(), AUTOSAVE_DEBOUNCE_MS);
-  }, [saveNow]);
+  const scheduleSave = useCallback(
+    (delay: number = AUTOSAVE_DEBOUNCE_MS) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => void saveNow(), delay);
+    },
+    [saveNow],
+  );
+
+  // Latest saveNow, for the unmount flush (which must not re-run on every change).
+  const saveNowRef = useRef(saveNow);
+  saveNowRef.current = saveNow;
+
+  // Leaving the page inside the debounce window (back arrow, sign out, a link)
+  // is a normal SPA navigation: no beforeunload fires, so flush by hand.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      void saveNowRef.current();
+    };
+  }, []);
 
   // Flush on Cmd/Ctrl+S and when the tab is hidden.
   useEffect(() => {
@@ -216,17 +303,14 @@ function EditorInner() {
   const reloadLatest = async () => {
     try {
       const d = await api.getDoc(id);
-      setDoc(d);
-      setTitle(d.title);
       versionRef.current = d.version;
       setCurrentVersion(d.version);
-      haltedRef.current = false;
-      dirtyRef.current = false;
-      if (editor) {
-        editor.commands.setContent(d.content as never, { emitUpdate: false });
-        editor.setEditable(d.myRole !== 'viewer');
-      }
-      setSaveState('saved');
+      setDoc(d);
+      setTitle(d.title);
+      // Rebuilding the editor around the server's copy (rather than replacing the
+      // content in place) keeps the reload out of the undo stack and out of the
+      // dirty tracking, so it cannot bounce straight back as a phantom save.
+      setContentEpoch((e) => e + 1);
     } catch (err) {
       toast.show(err instanceof Error ? err.message : 'Reload failed', 'error');
     }
@@ -245,9 +329,8 @@ function EditorInner() {
       const result = await api.restoreVersion(id, version);
       versionRef.current = result.version;
       setCurrentVersion(result.version);
-      dirtyRef.current = false;
-      editor.commands.setContent(result.content as never, { emitUpdate: false });
-      setSaveState('saved');
+      setDoc((d) => (d ? { ...d, content: result.content, version: result.version } : d));
+      setContentEpoch((e) => e + 1);
       toast.show(`Restored version ${version}`);
       return true;
     } catch (err) {
@@ -330,9 +413,11 @@ function EditorInner() {
     dirty: 'Unsaved changes...',
     saving: 'Saving...',
     error: 'Save failed - retrying',
+    rejected: 'Not saved',
     conflict: 'Version conflict',
     denied: 'Access changed',
   };
+  const statusIsError = saveState === 'conflict' || saveState === 'error' || saveState === 'denied' || saveState === 'rejected';
 
   return (
     <div className="editor-shell">
@@ -380,7 +465,7 @@ function EditorInner() {
           </div>
         )}
         <span className={`badge ${doc.myRole}`}>{doc.myRole}</span>
-        {!readOnly && <span className={`save-status ${saveState === 'conflict' || saveState === 'error' || saveState === 'denied' ? 'error' : ''}`}>{statusLabel[saveState]}</span>}
+        {!readOnly && <span className={`save-status ${statusIsError ? 'error' : ''}`}>{statusLabel[saveState]}</span>}
         <div className="spacer" />
         {isOwner && (
           <button className="btn sm" onClick={() => setShowShare(true)}>
@@ -391,6 +476,10 @@ function EditorInner() {
           <button className="btn ghost sm" onClick={() => setShowExport((v) => !v)}>
             Export ▾
           </button>
+          {/* The click-outside catcher lives inside the topbar's stacking context,
+              next to the menu: high enough to intercept clicks on the topbar
+              buttons behind it, low enough that the menu itself stays clickable. */}
+          {showExport && <div style={{ position: 'fixed', inset: 0, zIndex: 70 }} onClick={() => setShowExport(false)} />}
           {showExport && (
             <div
               style={{
@@ -404,6 +493,9 @@ function EditorInner() {
               </button>
               <button className="btn ghost sm" onClick={() => { setShowExport(false); void api.exportDoc(doc.id, 'txt', doc.title).catch(() => toast.show('Export failed', 'error')); }}>
                 Plain text (.txt)
+              </button>
+              <button className="btn ghost sm" onClick={() => { setShowExport(false); printDocument(doc.title); }}>
+                PDF (print)
               </button>
             </div>
           )}
@@ -435,6 +527,23 @@ function EditorInner() {
           Your access to this document changed - it is now read-only here. Copy any unsaved work before leaving.
         </div>
       )}
+      {saveState === 'rejected' && (
+        <div className="conflict-banner">
+          {saveError || 'The server rejected this change.'} Your text is still here - fix it, then
+          <button
+            className="btn sm"
+            onClick={() => {
+              haltedRef.current = false;
+              retryDelayRef.current = AUTOSAVE_DEBOUNCE_MS;
+              setSaveError('');
+              setSaveState('dirty');
+              void saveNow();
+            }}
+          >
+            Try saving again
+          </button>
+        </div>
+      )}
       {doc.myRole === 'viewer' && (
         <div className="readonly-banner">
           You have view-only access to this document. Ask {doc.owner.name} for editor access to make changes.
@@ -444,8 +553,10 @@ function EditorInner() {
       {!readOnly && <Toolbar editor={editor} />}
 
       <div className="editor-main">
-        <div className="editor-scroll" onClick={(e) => { if (e.target === e.currentTarget) editor.commands.focus(); }}>
+        <div className="editor-scroll" ref={setScrollEl} onClick={(e) => { if (e.target === e.currentTarget) editor.commands.focus(); }}>
           <div className="sheet">
+            {/* Print only: the title lives in the topbar, which print styles hide. */}
+            <h1 className="print-title">{doc.title}</h1>
             <EditorContent editor={editor} />
           </div>
         </div>
@@ -467,7 +578,7 @@ function EditorInner() {
 
       <BubbleMenu
         editor={editor}
-        options={{ placement: 'top', offset: 10 }}
+        options={{ placement: 'top', offset: 10, ...(scrollEl ? { scrollTarget: scrollEl } : {}) }}
         shouldShow={({ editor: ed }) => {
           if (modalOpenRef.current) return false;
           const { from, to } = ed.state.selection;
@@ -518,7 +629,6 @@ function EditorInner() {
           onClose={() => setAiSelection(null)}
         />
       )}
-      {showExport && <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setShowExport(false)} />}
     </div>
   );
 }

@@ -1,3 +1,6 @@
+import { getSchema } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import { Node as PMModelNode, type Schema } from '@tiptap/pm/model';
 import { z } from 'zod';
 import type { PMNode } from '@verso/shared';
 import { badRequest } from '../http/errors.ts';
@@ -25,14 +28,44 @@ const markSchema = z.object({
 });
 
 const nodeSchema: z.ZodType<PMNode> = z.lazy(() =>
-  z.object({
-    type: z.string().refine((t) => NODE_TYPES.has(t), { error: 'Unsupported node type' }),
-    attrs: z.record(z.string(), z.unknown()).optional(),
-    marks: z.array(markSchema).optional(),
-    text: z.string().optional(),
-    content: z.array(nodeSchema).optional(),
-  }),
+  z
+    .object({
+      type: z.string().refine((t) => NODE_TYPES.has(t), { error: 'Unsupported node type' }),
+      attrs: z.record(z.string(), z.unknown()).optional(),
+      marks: z.array(markSchema).optional(),
+      text: z.string().optional(),
+      content: z.array(nodeSchema).optional(),
+    })
+    // ProseMirror refuses to construct a text node with an empty or missing
+    // string, and TipTap silently replaces the whole document when that happens
+    // on load - so a document like that must never be stored.
+    .refine((n) => n.type !== 'text' || (typeof n.text === 'string' && n.text.length > 0), {
+      error: 'Text nodes must carry non-empty text',
+    })
+    .refine((n) => n.type !== 'text' || n.content === undefined, {
+      error: 'Text nodes cannot have child content',
+    })
+    // StarterKit renders h1-h6 and silently falls back to h1 for anything else,
+    // while the Markdown exporter would clamp it differently. Reject instead of
+    // letting the two disagree.
+    .refine((n) => n.type !== 'heading' || isHeadingLevel(n.attrs?.level), {
+      error: 'Heading level must be an integer between 1 and 6',
+    }),
 ) as z.ZodType<PMNode>;
+
+function isHeadingLevel(level: unknown): boolean {
+  return typeof level === 'number' && Number.isInteger(level) && level >= 1 && level <= 6;
+}
+
+/**
+ * The editor's real schema, built from the same StarterKit the client runs.
+ * Built once, lazily, so importing this module stays cheap.
+ */
+let editorSchema: Schema | null = null;
+function schema(): Schema {
+  editorSchema ??= getSchema([StarterKit]);
+  return editorSchema;
+}
 
 export function validateContent(raw: unknown): PMNode {
   const size = Buffer.byteLength(JSON.stringify(raw ?? null));
@@ -48,7 +81,24 @@ export function validateContent(raw: unknown): PMNode {
   }
   if (parsed.data.type !== 'doc') throw badRequest('Content root must be a "doc" node');
   stripUnsafeLinks(parsed.data);
+  assertEditorCanLoad(parsed.data);
   return parsed.data;
+}
+
+/**
+ * Final gate: build the document against the editor's own schema. The allowlist
+ * above catches unknown names; this catches valid names in invalid arrangements
+ * (a listItem holding text directly, a paragraph nested in a paragraph, marks
+ * where the schema forbids them) that would break the editor on load.
+ */
+function assertEditorCanLoad(doc: PMNode): void {
+  try {
+    PMModelNode.fromJSON(schema(), doc).check();
+  } catch (err) {
+    throw badRequest('Document content is not valid editor JSON', [
+      { path: '', message: err instanceof Error ? err.message.slice(0, 200) : 'Invalid document structure' },
+    ]);
+  }
 }
 
 /** Remove link marks whose href is not a safe protocol (defense in depth for exports/consumers). */
@@ -83,7 +133,8 @@ export function emptyDoc(): PMNode {
 /** Build a ProseMirror doc from plain text: blank-line-separated paragraphs. */
 export function textToDoc(text: string): PMNode {
   const paragraphs = text
-    .replace(/\r\n/g, '\n')
+    // CRLF (Windows) and bare CR (classic Mac, some exported logs) both mean "new line".
+    .replace(/\r\n?/g, '\n')
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
@@ -144,10 +195,12 @@ function blocksToMarkdown(nodes: PMNode[], indent: string): string {
 function blockToMarkdown(n: PMNode, indent: string): string {
   switch (n.type) {
     case 'paragraph':
-      return indent + inline(n);
+      return indent + escapeBlockStarts(inline(n));
     case 'heading': {
       const level = Math.min(Math.max(Number(n.attrs?.level ?? 1), 1), 6);
-      return indent + '#'.repeat(level) + ' ' + inline(n);
+      // A heading is a single line: a hard break inside it would end the heading,
+      // so it becomes a space instead.
+      return indent + '#'.repeat(level) + ' ' + inline(n, { breakAs: ' ' });
     }
     case 'bulletList':
       return listToMarkdown(n, indent, () => '- ');
@@ -161,9 +214,13 @@ function blockToMarkdown(n: PMNode, indent: string): string {
         .map((line) => indent + '> ' + line)
         .join('\n');
     case 'codeBlock': {
-      const lang = typeof n.attrs?.language === 'string' ? n.attrs.language : '';
+      const rawLang = typeof n.attrs?.language === 'string' ? n.attrs.language : '';
+      const lang = /^[\w+#.-]*$/.test(rawLang) ? rawLang : '';
       const code = rawText(n); // verbatim - no escaping, no normalization
-      return indent + '```' + lang + '\n' + code + '\n' + indent + '```';
+      // The fence must be longer than the longest backtick run in the code,
+      // otherwise the block ends early.
+      const fence = '`'.repeat(Math.max(3, longestBacktickRun(code) + 1));
+      return indent + fence + lang + '\n' + code + '\n' + indent + fence;
     }
     case 'horizontalRule':
       return indent + '---';
@@ -195,28 +252,62 @@ function rawText(node: PMNode): string {
 
 /** Escape Markdown metacharacters in plain text runs so exports round-trip. */
 function escapeMd(text: string): string {
-  return text.replace(/([\\`*_[\]<>])/g, '\\$1');
+  return text.replace(/([\\`*_[\]<>~|])/g, '\\$1');
 }
 
-function inline(node: PMNode): string {
+/**
+ * Escape constructs that only mean something at the start of a line. Without
+ * this a plain paragraph reading "1. Install" or "- note" or "# not a heading"
+ * comes back from the export as a list or a heading that the user never wrote.
+ */
+function escapeBlockStarts(text: string): string {
+  return text
+    .split('\n')
+    .map((line) =>
+      line.replace(/^(\s*)(#{1,6}[ \t]|[-+][ \t]|\d{1,9}[.)][ \t]|>|-{3,}\s*$|={3,}\s*$)/, (_m, ws: string, marker: string) => `${ws}\\${marker}`),
+    )
+    .join('\n');
+}
+
+function longestBacktickRun(text: string): number {
+  return (text.match(/`+/g) ?? []).reduce((max, run) => Math.max(max, run.length), 0);
+}
+
+/** Wrap inline code in a backtick run long enough to survive backticks inside it. */
+function codeSpan(text: string): string {
+  const fence = '`'.repeat(longestBacktickRun(text) + 1);
+  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
+  return fence + pad + text + pad + fence;
+}
+
+/**
+ * Percent-encode the characters that would terminate a Markdown link target.
+ * Note encodeURIComponent leaves parentheses alone, which is exactly the case
+ * that breaks `[text](href)`, so the escape is written out here.
+ */
+function linkTarget(href: string): string {
+  return href.replace(/[()<>"\s]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+}
+
+function inline(node: PMNode, options: { breakAs?: string } = {}): string {
   const parts: string[] = [];
   for (const child of node.content ?? []) {
     if (child.type === 'hardBreak') {
-      parts.push('  \n');
+      parts.push(options.breakAs ?? '  \n');
       continue;
     }
     if (child.type === 'text') {
       const marks = new Set((child.marks ?? []).map((m) => m.type));
-      let text = marks.has('code') ? '`' + (child.text ?? '') + '`' : escapeMd(child.text ?? '');
+      let text = marks.has('code') ? codeSpan(child.text ?? '') : escapeMd(child.text ?? '');
       if (marks.has('bold')) text = '**' + text + '**';
       if (marks.has('italic')) text = '*' + text + '*';
       if (marks.has('strike')) text = '~~' + text + '~~';
       if (marks.has('underline')) text = '<u>' + text + '</u>';
       const link = (child.marks ?? []).find((m) => m.type === 'link');
-      if (link && typeof link.attrs?.href === 'string') text = `[${text}](${link.attrs.href})`;
+      if (link && typeof link.attrs?.href === 'string') text = `[${text}](${linkTarget(link.attrs.href)})`;
       parts.push(text);
     } else {
-      parts.push(inline(child));
+      parts.push(inline(child, options));
     }
   }
   return parts.join('');

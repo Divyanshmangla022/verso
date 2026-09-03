@@ -178,14 +178,20 @@ docsRouter.put(
     }
 
     // Record the revision that was just committed (correct author + timestamp).
-    await recordRevision({
-      docId: doc._id,
-      version: result.version,
-      title: result.title,
-      content,
-      savedBy: user._id,
-      at: updatedAt,
-    });
+    // The save itself is already durable, so a history write that fails must not
+    // turn a successful save into a 500 the client would retry forever.
+    try {
+      await recordRevision({
+        docId: doc._id,
+        version: result.version,
+        title: result.title,
+        content,
+        savedBy: user._id,
+        at: updatedAt,
+      });
+    } catch (err) {
+      console.error(`Revision snapshot failed for ${doc._id.toString()} v${result.version}:`, err);
+    }
 
     const body: SaveContentResponse = { version: result.version, updatedAt: updatedAt.toISOString() };
     res.json(body);
@@ -198,13 +204,16 @@ docsRouter.delete(
   asyncRoute(async (req, res) => {
     const user = currentUser(req);
     const { doc } = await requireDocAccess(user._id, pathParam(req, 'id'), 'owner');
+    // Remove the document row first: every other route resolves access through
+    // it, so from this point a concurrent save or upload fails cleanly instead
+    // of writing rows the cascade below has already passed.
+    await documents().deleteOne({ _id: doc._id });
     const bucket = getBucket();
     const files = await bucket.find({ 'metadata.docId': doc._id }).toArray();
-    await Promise.all(files.map((f) => bucket.delete(f._id)));
+    await Promise.all(files.map((f) => bucket.delete(f._id).catch(() => undefined)));
     await Promise.all([
       shares().deleteMany({ docId: doc._id }),
       versions().deleteMany({ docId: doc._id }),
-      documents().deleteOne({ _id: doc._id }),
     ]);
     res.status(204).end();
   }),
@@ -295,9 +304,14 @@ docsRouter.get(
     const { doc } = await requireDocAccess(user._id, pathParam(req, 'id'), 'viewer');
     const format = req.query.format === 'txt' ? 'txt' : 'md';
     const body = format === 'txt' ? docToText(doc.content) + '\n' : docToMarkdown(doc.content);
+    // ASCII fallback for old clients, plus the real (possibly non-Latin) title.
     const safeName = doc.title.replace(/[^\w\- ]+/g, '').trim().slice(0, 80) || 'document';
+    const fullName = `${doc.title.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim().slice(0, 120) || 'document'}.${format}`;
     res.setHeader('Content-Type', format === 'txt' ? 'text/plain; charset=utf-8' : 'text/markdown; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.${format}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${safeName}.${format}"; filename*=UTF-8''${encodeURIComponent(fullName)}`,
+    );
     res.send(body);
   }),
 );

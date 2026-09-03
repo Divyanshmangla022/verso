@@ -12,13 +12,15 @@ export function toPublicUser(u: UserDoc): PublicUser {
 
 export function signToken(userId: ObjectId): string {
   return jwt.sign({ sub: userId.toString() }, config.jwtSecret, {
+    algorithm: 'HS256',
     expiresIn: config.jwtExpiresIn as jwt.SignOptions['expiresIn'],
   });
 }
 
 export function verifyToken(token: string): string {
   try {
-    const payload = jwt.verify(token, config.jwtSecret);
+    // Pin the algorithm: never let a token's own header pick how it is verified.
+    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
     if (typeof payload === 'string' || typeof payload.sub !== 'string') throw new Error('bad payload');
     return payload.sub;
   } catch {

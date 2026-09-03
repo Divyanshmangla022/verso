@@ -20,6 +20,12 @@ free web service plus a free MongoDB Atlas cluster is the whole footprint.
 3. In the service's Environment tab set:
  - `MONGODB_URI` - the Atlas string from step 1
  - `GEMINI_API_KEY` - optional; without it the AI runs in labeled heuristic mode
+
+   `TRUST_PROXY_HOPS=1` is already in `render.yaml`. It matters: Express reads
+   the client address from `X-Forwarded-For` only when it is told how many
+   proxies to trust, and without it every visitor shares one rate-limit bucket.
+   Set it to the real hop count for your platform and never to `true`, which
+   would let clients spoof the header.
 4. Deploy. First build takes a few minutes.
 
 ### 3. Seed demo data (once)
@@ -33,8 +39,9 @@ This creates `ada@demo.verso.app` / `grace@demo.verso.app`
 (password `VersoDemo1!`) and sample documents including a pre-shared one.
 
 ### Notes
-- **Cold starts:** Render's free tier sleeps after ~15 min idle; the first
-  request may take ~50 s. Mention this to reviewers (it's in SUBMISSION.md).
+- **Cold starts:** Render's free tier sleeps after ~15 min idle and takes about
+  a minute to wake. The client shows a "waking the server" notice instead of an
+  error while that happens, and retries reads with backoff for ~30 s.
 - **Attachments** live in GridFS inside Atlas, so they survive instance
   restarts despite the ephemeral disk.
 

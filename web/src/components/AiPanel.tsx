@@ -30,7 +30,11 @@ function useAiStream() {
         onError: (message) => setState((s) => ({ ...s, error: message, running: false })),
       },
       controller.signal,
-    );
+    ).finally(() => {
+      // However the stream ended, this run is over: never leave the panel
+      // spinning because a terminal event went missing.
+      if (abortRef.current === controller) setState((s) => (s.running ? { ...s, running: false } : s));
+    });
   };
   return { state, start };
 }

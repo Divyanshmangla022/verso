@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
 import { DashboardPage } from './pages/DashboardPage';
@@ -7,10 +7,25 @@ import { LoginPage } from './pages/LoginPage';
 // The editor bundles TipTap/ProseMirror - split it so login/dashboard stay light.
 const EditorPage = lazy(() => import('./pages/EditorPage').then((m) => ({ default: m.EditorPage })));
 
+/** How long to wait before admitting that this is a cold start, not a hang. */
+const COLD_START_HINT_MS = 3_000;
+
 function Loading() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), COLD_START_HINT_MS);
+    return () => clearTimeout(timer);
+  }, []);
   return (
-    <div className="page-center">
+    <div className="page-center" style={{ flexDirection: 'column', gap: 14 }}>
       <div className="spinner" aria-label="Loading" />
+      {slow && (
+        // The demo runs on a free instance that sleeps when idle; the first
+        // request after that takes up to a minute to wake it.
+        <p className="muted" style={{ margin: 0, maxWidth: 320, textAlign: 'center' }} role="status">
+          Waking the server - the free demo instance sleeps when idle, so the first load can take up to a minute.
+        </p>
+      )}
     </div>
   );
 }

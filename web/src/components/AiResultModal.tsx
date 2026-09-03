@@ -94,12 +94,23 @@ export function AiResultModal({
   }, []);
 
   const replaceSelection = () => {
+    // The document can change while the result streams (another edit, an undo, a
+    // reload). Replacing by the original offsets would then overwrite unrelated
+    // text - or throw, if the document has since become shorter.
+    const size = editor.state.doc.content.size;
+    const from = Math.min(selection.from, size);
+    const to = Math.min(selection.to, size);
+    const current = editor.state.doc.textBetween(from, to, '\n\n', '\n').trim();
+    if (current !== selection.text.trim()) {
+      toast.show('The document changed since this result was generated - copy it and paste where you want it.', 'error');
+      return;
+    }
     const nodes = textToNodes(output.trim());
     editor
       .chain()
       .focus()
-      .deleteRange({ from: selection.from, to: selection.to })
-      .insertContentAt(selection.from, nodes.length === 1 && nodes[0].content ? nodes[0].content : nodes)
+      .deleteRange({ from, to })
+      .insertContentAt(from, nodes.length === 1 && nodes[0].content ? nodes[0].content : nodes)
       .run();
     onClose();
   };

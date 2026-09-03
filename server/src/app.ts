@@ -17,6 +17,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function createApp(): Express {
   const app = express();
   app.disable('x-powered-by');
+  // Rate limiting keys on req.ip, which is the proxy's address unless Express is
+  // told how many proxies to trust. A hop count (never `true`) keeps clients
+  // from spoofing X-Forwarded-For. See config.trustProxyHops.
+  app.set('trust proxy', config.trustProxyHops);
   app.use(express.json({ limit: '3mb' }));
 
   // Security headers (single-origin SPA + API; inline styles allowed for React style props).
@@ -25,9 +29,13 @@ export function createApp(): Express {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    // Render terminates TLS and redirects HTTP, so HSTS is safe to assert there.
+    if (config.isProd) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
     );
     next();
   });
@@ -49,7 +57,9 @@ export function createApp(): Express {
   });
 
   // One line per API request (no bodies, no tokens) - enough to debug without leaking.
+  // API responses carry per-user data and bearer-authorized content: never cache them.
   app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Cache-Control', 'no-store');
     const start = Date.now();
     res.on('finish', () => {
       console.log(`${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - start}ms)`);

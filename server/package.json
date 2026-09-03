@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --watch --env-file-if-exists=.env src/index.ts",
+    "dev": "node --watch-path=src --watch-path=../shared/src --env-file-if-exists=.env src/index.ts",
     "start": "node --env-file-if-exists=.env src/index.ts",
     "seed": "node --env-file-if-exists=.env src/seed.ts",
-    "test": "node --test --test-concurrency=1 test/*.test.ts",
+    "test": "node --test --test-concurrency=1 \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

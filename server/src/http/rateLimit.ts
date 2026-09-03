@@ -20,7 +20,7 @@ export function rateLimit(options: {
   const buckets = new Map<string, Bucket>();
   let lastSweep = Date.now();
 
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     const now = Date.now();
     // Periodically drop expired buckets so the map cannot grow unbounded.
     if (now - lastSweep > options.windowMs) {
@@ -38,6 +38,8 @@ export function rateLimit(options: {
     }
     bucket.count += 1;
     if (bucket.count > options.max) {
+      // Tell the caller when it is worth trying again instead of making it guess.
+      res.setHeader?.('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
       next(new HttpError(429, options.message));
       return;
     }

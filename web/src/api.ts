@@ -60,9 +60,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
   const method = (init.method ?? 'GET').toUpperCase();
-  // Reads are safe to retry automatically; a brief server restart or network
-  // blip then heals invisibly instead of surfacing a scary error.
-  const attempts = method === 'GET' ? 3 : 1;
+  // Reads are safe to retry automatically; a brief server restart, a free-tier
+  // instance waking up, or a network blip then heals invisibly instead of
+  // surfacing a scary error. Backoff caps the total wait around 30 s.
+  const attempts = method === 'GET' ? 6 : 1;
   let res: Response | null = null;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -70,7 +71,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       break;
     } catch {
       if (i < attempts - 1) {
-        await sleep(600 * (i + 1));
+        await sleep(Math.min(8_000, 600 * 2 ** i));
         continue;
       }
       throw new ApiRequestError(0, 'Cannot reach the server. Check your connection and try again.');
@@ -211,6 +212,7 @@ async function streamSse(path: string, body: unknown, handlers: AiStreamHandlers
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let sawTerminal = false;
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -234,10 +236,18 @@ async function streamSse(path: string, body: unknown, handlers: AiStreamHandlers
         }
         if (event.type === 'meta') handlers.onMeta?.(event);
         else if (event.type === 'chunk') handlers.onChunk(event.text);
-        else if (event.type === 'done') handlers.onDone?.();
-        else if (event.type === 'error') handlers.onError?.(event.reason ? `${event.message} (${event.reason})` : event.message);
+        else if (event.type === 'done') {
+          sawTerminal = true;
+          handlers.onDone?.();
+        } else if (event.type === 'error') {
+          sawTerminal = true;
+          handlers.onError?.(event.reason ? `${event.message} (${event.reason})` : event.message);
+        }
       }
     }
+    // A stream that stops without saying why (proxy timeout, instance restart)
+    // must still end the caller's "running" state.
+    if (!sawTerminal) handlers.onError?.('The AI stream ended unexpectedly. Please try again.');
   } catch (err) {
     if ((err as Error).name !== 'AbortError') handlers.onError?.('The AI stream was interrupted.');
   }

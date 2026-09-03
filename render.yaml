@@ -12,6 +12,11 @@ services:
         value: production
       - key: PORT
         value: "4000"
+      # Render puts one proxy hop in front of the container. Without this the
+      # per-IP rate limiters would see the proxy's address for every visitor
+      # and throttle everyone as one bucket.
+      - key: TRUST_PROXY_HOPS
+        value: "1"
       - key: MONGODB_URI
         sync: false # paste the Atlas connection string in the dashboard
       - key: JWT_SECRET

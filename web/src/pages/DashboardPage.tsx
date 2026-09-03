@@ -220,14 +220,16 @@ function DocCard({
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         <div className="title">{doc.title}</div>
         {isOwned && (
-          <div className="card-actions" onClick={(e) => e.stopPropagation()}>
+          // Stop both clicks and keys here: without the keydown guard, Enter on
+          // the rename button also reaches the card and opens the document.
+          <div className="card-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
             {onRename && (
-              <button className="icon-btn" title="Rename" onClick={onRename}>
+              <button className="icon-btn" title="Rename" aria-label={`Rename ${doc.title}`} onClick={onRename}>
                 ✎
               </button>
             )}
             {onDelete && (
-              <button className="icon-btn danger" title="Delete" onClick={onDelete}>
+              <button className="icon-btn danger" title="Delete" aria-label={`Delete ${doc.title}`} onClick={onDelete}>
                 🗑
               </button>
             )}

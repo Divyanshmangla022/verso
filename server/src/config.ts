@@ -14,6 +14,17 @@ function int(name: string, fallback: number): number {
   return n;
 }
 
+/** Like int(), but 0 is a meaningful value (e.g. "no proxy in front of us"). */
+function count(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  if (Number.isNaN(n) || n < 0) {
+    throw new Error(`Invalid ${name}: expected a non-negative integer, got "${raw}"`);
+  }
+  return n;
+}
+
 const isProd = process.env.NODE_ENV === 'production';
 
 /**
@@ -58,4 +69,14 @@ export const config = {
   bcryptRounds: int('BCRYPT_ROUNDS', 10),
   rateLimitAuthMax: int('RATE_LIMIT_AUTH_MAX', 30),
   rateLimitAiMax: int('RATE_LIMIT_AI_MAX', 60),
+  rateLimitUploadMax: int('RATE_LIMIT_UPLOAD_MAX', 40),
+  /**
+   * How many reverse proxies sit in front of this process. Express only reads
+   * X-Forwarded-For when it is told how far to trust it; with the default (0)
+   * every request behind a proxy reports the proxy's address, which would
+   * collapse the per-IP rate limiters into one shared bucket. Render puts a
+   * single hop in front of the container, hence the production default.
+   * Never use `true`: that lets any client spoof its address.
+   */
+  trustProxyHops: count('TRUST_PROXY_HOPS', isProd ? 1 : 0),
 } as const;

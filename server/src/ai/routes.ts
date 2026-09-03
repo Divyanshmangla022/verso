@@ -50,7 +50,12 @@ function requestSignal(res: Response, ms = 60_000): AbortSignal {
   return AbortSignal.any([controller.signal, AbortSignal.timeout(ms)]);
 }
 
-/** Stream an AI run as server-sent events over a POST response body. */
+/**
+ * Stream an AI run as server-sent events over a POST response body.
+ * Every path that leaves this function while the client is still connected
+ * sends exactly one terminal event ('done' or 'error') - the client's UI stays
+ * in its "running" state until it sees one.
+ */
 async function streamRun(res: Response, run: AiRun): Promise<void> {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -62,16 +67,27 @@ async function streamRun(res: Response, run: AiRun): Promise<void> {
     ...(run.model ? { model: run.model } : {}),
     ...(run.note ? { note: run.note } : {}),
   });
+  let chunks = 0;
   try {
     for await (const text of run.stream) {
       if (res.writableEnded || res.destroyed) return;
+      chunks += 1;
       sseWrite(res, { type: 'chunk', text });
+    }
+    if (chunks === 0) {
+      // A model can finish without emitting text (safety stop, or reasoning that
+      // consumed the whole output budget). Saying so beats an empty result box.
+      sseWrite(res, {
+        type: 'error',
+        message: 'The AI returned no text for this request. Try again, or select a shorter passage.',
+      });
+      return;
     }
     sseWrite(res, { type: 'done' });
   } catch (err) {
-    if ((err as Error)?.name === 'AbortError' || res.destroyed) {
-      // Client went away or the time budget expired - nothing useful to send.
-      res.end();
+    if (res.destroyed) return; // client went away; nothing to tell anyone
+    if ((err as Error)?.name === 'AbortError' || (err as Error)?.name === 'TimeoutError') {
+      sseWrite(res, { type: 'error', message: 'The AI request took too long and was stopped. Please try again.' });
       return;
     }
     console.error('AI stream failed:', err);

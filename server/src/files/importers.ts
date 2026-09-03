@@ -25,9 +25,15 @@ export interface ImportedDoc {
   warnings: string[];
 }
 
+/** Titles are capped everywhere else (rename, deriveTitle); a long filename must not slip past. */
+const MAX_TITLE_CHARS = 200;
+
+/** Word ignores underline by default; the editor supports it, so keep it. */
+const DOCX_STYLE_MAP = ['u => u'];
+
 export async function importFile(originalName: string, buffer: Buffer): Promise<ImportedDoc> {
   const ext = extensionOf(originalName);
-  const fallbackTitle = originalName.replace(/\.[^.]+$/, '').trim() || 'Imported document';
+  const fallbackTitle = originalName.replace(/\.[^.]+$/, '').trim().slice(0, MAX_TITLE_CHARS) || 'Imported document';
 
   let content: PMNode;
   const warnings: string[] = [];
@@ -38,6 +44,7 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
     }
     case '.md': {
       const html = md.render(buffer.toString('utf8'));
+      warnDroppedHtml(html, warnings);
       content = sanitizeGenerated(generateJSON(html, extensions));
       break;
     }
@@ -45,11 +52,9 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
       assertZipWithinLimits(buffer);
       let html: string;
       try {
-        const result = await mammoth.convertToHtml({ buffer });
+        const result = await mammoth.convertToHtml({ buffer }, { styleMap: DOCX_STYLE_MAP });
         html = result.value;
-        if (/<img/i.test(html) || /<table/i.test(html)) {
-          warnings.push('Images and tables are not supported in the editor and were removed.');
-        }
+        warnDroppedHtml(html, warnings);
         for (const m of result.messages.slice(0, 3)) warnings.push(m.message);
       } catch {
         throw badRequest('Could not read this .docx file - it may be corrupted or not a real Word document');
@@ -62,6 +67,13 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
   }
 
   return { title: deriveTitle(content) ?? fallbackTitle, content, warnings };
+}
+
+/** Tell the user what the editor's schema cannot keep, whatever the source format. */
+function warnDroppedHtml(html: string, warnings: string[]): void {
+  if (/<img/i.test(html) || /<table/i.test(html)) {
+    warnings.push('Images and tables are not supported in the editor and were removed.');
+  }
 }
 
 export function extensionOf(name: string): string {
