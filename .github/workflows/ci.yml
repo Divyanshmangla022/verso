@@ -44,20 +44,23 @@ jobs:
 
       # A real finding fails the build. A registry outage does not: npm audit
       # exits 1 for both, so the two are told apart by the message, and the
-      # outage case is retried, then reported as a warning rather than a failure.
+      # outage case is retried once, then reported as a warning rather than a
+      # failure. Each attempt is hard-bounded: npm's own fetch retries and
+      # five-minute timeouts would otherwise let a hanging endpoint stall the
+      # job for half an hour.
       - name: Audit production dependencies
         shell: bash
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             set +e
-            output=$(npm audit --omit=dev --audit-level=high 2>&1)
+            output=$(timeout 120 npm audit --omit=dev --audit-level=high --fetch-retries=0 --fetch-timeout=60000 2>&1)
             code=$?
             set -e
             echo "$output"
             if [ "$code" -eq 0 ]; then exit 0; fi
-            if echo "$output" | grep -qiE 'audit endpoint returned an error|Service Unavailable|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN'; then
-              echo "::warning::npm audit could not reach the registry (attempt $attempt of 3)"
-              sleep $((attempt * 20))
+            if [ "$code" -eq 124 ] || echo "$output" | grep -qiE 'audit endpoint returned an error|Service Unavailable|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN'; then
+              echo "::warning::npm audit could not reach the registry (attempt $attempt of 2)"
+              sleep 30
               continue
             fi
             exit "$code"
