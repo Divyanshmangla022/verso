@@ -16,9 +16,9 @@ rejected, and how correctness was verified.
   layer, TipTap editor wiring, SSE streaming client, CSS system - was
   drafted quickly enough to leave real time for verification, which is
   where the actual engineering judgment went.
-- **The test suite.** 52 end-to-end API tests (auth, permission matrix,
+- **The test suite.** 55 end-to-end API tests (auth, permission matrix,
   concurrency conflicts, import, attachments, versions, export fidelity, rate
-  limiting, AI SSE) plus a 37-check browser run were drafted against the real
+  limiting, AI SSE) plus a 38-check browser run were drafted against the real
   app and then tightened by hand - writing these manually would have consumed a
   large share of the timebox.
 - **Adversarial review.** After the app worked, reviewers read it from several
@@ -68,7 +68,7 @@ rejected, and how correctness was verified.
 
 ## How correctness, UX quality, and reliability were verified
 
-1. **Automated:** `npm test` (52 E2E API tests) and strict `tsc` across all
+1. **Automated:** `npm test` (55 E2E API tests) and strict `tsc` across all
    three workspaces on every change; `npm audit` reports no vulnerabilities in
    the production dependency tree; the production Docker image is built and
    smoke-tested (health, login, SPA serving) before deploy. All of it runs in
@@ -81,7 +81,7 @@ rejected, and how correctness was verified.
    downloaded attachment bytes equal the upload.
 3. **Real-browser verification:** `npm run qa` (`scripts/qa.mjs`) starts a
    throwaway MongoDB, seeds it, boots the production server and drives the
-   built app in Chromium as two different users - 37 checks covering typing and
+   built app in Chromium as two different users - 38 checks covering typing and
    formatting, autosave settling, undo right after load, the selection menu and
    its scroll anchoring, AI rewrite and summarize, sharing, a genuine two-user
    save conflict and recovery, viewer mode, import, attachments and the mobile

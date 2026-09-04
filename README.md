@@ -65,7 +65,7 @@ docker run -p 4000:4000 -e MONGODB_URI=<uri> -e JWT_SECRET=<24+ chars> verso
 ## Tests
 
 ```bash
-npm test             # 52 end-to-end API tests (node:test)
+npm test             # 55 end-to-end API tests (node:test)
 ```
 
 The suite boots the real Express app against a throwaway MongoDB
@@ -77,7 +77,7 @@ size), attachments, version restore, Markdown export fidelity, rate limiting
 behind a proxy, HTTP error mapping, and the AI endpoints.
 
 ```bash
-npm run qa           # 37 checks driving the real UI in Chromium
+npm run qa           # 38 checks driving the real UI in Chromium
 ```
 
 The QA run is self-contained: it starts a throwaway MongoDB, seeds the demo

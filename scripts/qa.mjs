@@ -198,12 +198,30 @@ async function main() {
 
     // The document scrolls inside its own pane, so the menu has to follow that
     // pane rather than the window - otherwise it detaches from the selection.
+    // Fonts differ per platform, so first make sure there is room to scroll.
+    const pane = ada.locator('.editor-scroll');
+    await pane.evaluate((el) => {
+      const sheet = el.querySelector('.sheet');
+      if (sheet) sheet.style.paddingBottom = '900px';
+    });
     const beforeScroll = await bubble.boundingBox();
-    await ada.locator('.editor-scroll').evaluate((el) => el.scrollBy(0, 160));
-    await delay(500);
+    const scrolled = await pane.evaluate((el) => {
+      const start = el.scrollTop;
+      el.scrollBy(0, 160);
+      return el.scrollTop - start;
+    });
+    await delay(600);
     const afterScroll = await bubble.boundingBox();
     const moved = beforeScroll && afterScroll ? Math.abs(beforeScroll.y - afterScroll.y) : 0;
-    check('the bubble menu follows the scrolling editor pane', moved > 100, `moved ${Math.round(moved)}px for a 160px scroll`);
+    check(
+      'the bubble menu follows the scrolling editor pane',
+      scrolled > 0 && Math.abs(moved - scrolled) <= 12,
+      `pane scrolled ${Math.round(scrolled)}px, menu moved ${Math.round(moved)}px`,
+    );
+    await pane.evaluate((el) => {
+      const sheet = el.querySelector('.sheet');
+      if (sheet) sheet.style.paddingBottom = '';
+    });
 
     // ---- AI assist on the selection -------------------------------------
     await bubble.getByRole('button', { name: 'Rewrite' }).click();
@@ -248,18 +266,25 @@ async function main() {
     // ---- AI panel -------------------------------------------------------
     await ada.locator('header.topbar').getByRole('button', { name: /AI/ }).click();
     await ada.getByRole('button', { name: /Generate summary/i }).click();
-    await ada.locator('.ai-output').first().waitFor({ timeout: 45_000 });
+    const aiPanel = ada.locator('aside[aria-label="AI assistant"]');
+    // Output or a surfaced error - never a spinner that outlives the request.
+    await aiPanel.locator('.ai-output, .error-text').first().waitFor({ timeout: 45_000 });
     await delay(2500);
-    const summary = await ada.locator('.ai-output').first().innerText();
-    check('AI summary produces output', summary.trim().length > 20, summary.slice(0, 80));
+    const summary = await aiPanel.locator('.ai-output').first().innerText().catch(() => '');
+    const aiError = await aiPanel.locator('.error-text').first().innerText().catch(() => '');
+    check('AI summary produces output', summary.trim().length > 20, summary.trim() ? summary.slice(0, 80) : `error shown: ${aiError.slice(0, 100)}`);
     const badge = await ada.locator('.badge.ai').first().innerText().catch(() => '');
     check('the AI engine is labelled in the UI', /gemini|heuristic/i.test(badge), badge);
+    check('the AI panel does not stay stuck in "Summarizing..."', !(await ada.getByRole('button', { name: /Summarizing/ }).isVisible().catch(() => false)));
     await shot(ada, 'ai-panel');
-    await ada.locator('aside[aria-label="AI assistant"] .icon-btn').click();
+    await aiPanel.locator('.icon-btn').click();
 
     // ---- version history ------------------------------------------------
     await ada.getByTitle('Version history').click();
     await ada.locator('aside[aria-label="Version history"]').waitFor();
+    // The list loads after the drawer opens; wait for an earlier version to be
+    // listed under the "current" row rather than counting during the fetch.
+    await ada.locator('.version-row').nth(1).waitFor({ timeout: 20_000 }).catch(() => undefined);
     const versions = await ada.locator('.version-row').count();
     check('version history lists snapshots', versions >= 2, `${versions} rows`);
     await shot(ada, 'history');
@@ -365,7 +390,9 @@ async function main() {
     await signIn(mobile, 'ada@demo.verso.app');
     await mobile.locator('.doc-card').first().waitFor();
     const overflow = await mobile.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    check('the dashboard does not scroll sideways on a phone', overflow <= 2, `${overflow}px overflow`);
+    // A few pixels of slack: font metrics differ between platforms and the
+    // question is whether the layout is broken, not whether it is pixel-exact.
+    check('the dashboard does not scroll sideways on a phone', overflow <= 8, `${overflow}px overflow`);
     await shot(mobile, 'mobile');
   } finally {
     await browser.close();

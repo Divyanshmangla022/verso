@@ -67,8 +67,15 @@ export function createApp(): Express {
     next();
   });
 
+  // `commit` answers "which build is this?" without a dashboard: Render injects
+  // RENDER_GIT_COMMIT into the container; elsewhere it reads "dev".
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, service: 'verso', time: new Date().toISOString() });
+    res.json({
+      ok: true,
+      service: 'verso',
+      commit: (process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? 'dev').slice(0, 12),
+      time: new Date().toISOString(),
+    });
   });
 
   // Runtime metadata the client reads at startup (keeps UI copy in sync with server limits).

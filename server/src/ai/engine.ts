@@ -63,25 +63,71 @@ function recommendedModel(err: unknown): string {
   return m?.[1] ?? FALLBACK_MODEL;
 }
 
+/**
+ * Capacity errors, not request errors: the model is overloaded (503) or the
+ * key's per-minute quota is momentarily spent (429). On the free tier these
+ * are routine and clear within seconds, so a short retry turns "The AI request
+ * failed" into an answer that is merely a little late.
+ */
+function transientUpstream(err: unknown): boolean {
+  return /\b(503|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand|try again later/i.test(describeAiError(err));
+}
+
+const TRANSIENT_RETRY_DELAYS_MS = [1_500, 3_500];
+
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error('aborted'));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error('aborted'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** Exported for the regression test; not part of the engine's public surface. */
+export async function withTransientRetry<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (err) {
+      const delay = TRANSIENT_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined || !transientUpstream(err) || signal?.aborted) throw err;
+      attempt += 1;
+      console.warn(`Gemini transient failure (${describeAiError(err).slice(0, 60)}); retry ${attempt} in ${delay} ms`);
+      await pause(delay, signal);
+    }
+  }
+}
+
 /** Set once if the API rejects our thinking config; after that we send none. */
 let thinkingUnsupported = false;
 
-async function withModel<T>(fn: (model: string) => Promise<T>): Promise<T> {
+async function withModel<T>(fn: (model: string) => Promise<T>, signal?: AbortSignal): Promise<T> {
   const model = currentModel();
   try {
-    return await fn(model);
+    return await withTransientRetry(() => fn(model), signal);
   } catch (err) {
     if (thinkingRejected(err) && !thinkingUnsupported) {
       console.warn(`Gemini rejected the thinking config for "${model}"; falling back to the model default`);
       thinkingUnsupported = true;
-      return fn(model);
+      return withTransientRetry(() => fn(model), signal);
     }
     if (!modelUnavailable(err)) throw err;
     const next = recommendedModel(err);
     if (next === model) throw err;
     console.warn(`Gemini model "${model}" unavailable here; switching to "${next}"`);
     activeModel = next;
-    return fn(next);
+    return withTransientRetry(() => fn(next), signal);
   }
 }
 
@@ -132,6 +178,7 @@ async function* geminiStream(systemInstruction: string, prompt: string, signal?:
         ...(signal ? { abortSignal: signal } : {}),
       },
     }),
+    signal,
   );
   for await (const chunk of stream) {
     const text = chunk.text;

@@ -70,7 +70,7 @@ owned/shared dashboard split, version history + restore, Markdown/TXT/PDF
 export, streaming AI (rewrite/shorten/expand/grammar/tone/summarize/ask)
 with graceful no-key fallback, Dockerized deploy.
 
-**Verification:** 52 API tests (`npm test`) and 37 checks driving the real UI
+**Verification:** 55 API tests (`npm test`) and 38 checks driving the real UI
 in Chromium as two users (`npm run qa`), both run in CI on every push together
 with the strict typecheck, the production build, and a dependency audit.
 

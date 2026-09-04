@@ -475,6 +475,52 @@ describe('attachment naming', () => {
   });
 });
 
+describe('AI upstream resilience', () => {
+  it('retries a 503/429 from the model a couple of times, then gives up', async () => {
+    const { withTransientRetry } = await import('../src/ai/engine.ts');
+    let calls = 0;
+    const flaky = async () => {
+      calls += 1;
+      if (calls < 3) throw new Error('{"error":{"code":503,"status":"UNAVAILABLE","message":"The model is overloaded. Please try again later."}}');
+      return 'ok';
+    };
+    assert.equal(await withTransientRetry(flaky), 'ok');
+    assert.equal(calls, 3, 'two retries, then success');
+
+    calls = 0;
+    const alwaysBusy = async () => {
+      calls += 1;
+      throw new Error('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Quota exceeded"}}');
+    };
+    await assert.rejects(() => withTransientRetry(alwaysBusy), /429|RESOURCE_EXHAUSTED/);
+    assert.equal(calls, 3, 'gives up after the retry budget');
+  });
+
+  it('does not retry errors that will not change (bad request, unknown model)', async () => {
+    const { withTransientRetry } = await import('../src/ai/engine.ts');
+    let calls = 0;
+    const broken = async () => {
+      calls += 1;
+      throw new Error('{"error":{"code":404,"status":"NOT_FOUND","message":"models/nope is not found"}}');
+    };
+    await assert.rejects(() => withTransientRetry(broken), /NOT_FOUND/);
+    assert.equal(calls, 1);
+  });
+
+  it('stops retrying as soon as the request is aborted', async () => {
+    const { withTransientRetry } = await import('../src/ai/engine.ts');
+    const controller = new AbortController();
+    let calls = 0;
+    const busy = async () => {
+      calls += 1;
+      controller.abort();
+      throw new Error('{"error":{"code":503,"status":"UNAVAILABLE","message":"overloaded"}}');
+    };
+    await assert.rejects(() => withTransientRetry(busy, controller.signal));
+    assert.equal(calls, 1, 'no retry after the client went away');
+  });
+});
+
 describe('AI guardrails', () => {
   it('rejects oversize selections and non-allowlisted tones with actionable messages', async () => {
     const owner = await registerUser('guard@test.dev', 'Guard Rail');

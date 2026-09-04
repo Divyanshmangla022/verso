@@ -49,8 +49,8 @@ chose four deep slices and cut everything else deliberately:
 | **TipTap 3 (ProseMirror)** | Production-grade editing semantics (marks, history, lists, keyboard shortcuts) without building an editor from scratch; its JSON output is the persistence format. |
 | **React 19 + Vite** | Editor page is code-split (~148 KB gz lazy chunk) so login/dashboard stay light (~79 KB gz). |
 | **JWT + bcryptjs** | Stateless auth that works on a single free dyno; login compares against a constant-time dummy hash on unknown emails to avoid account-existence timing leaks. |
-| **node:test + mongodb-memory-server** | 52 E2E tests run the real HTTP app against a real (throwaway) MongoDB - no mocking of the layers under test. |
-| **Playwright for the parts tests cannot see** | 37 checks drive the built app in Chromium as two users. Undo after opening a document, a menu clickable behind its own backdrop, a bubble menu that follows the right scroll container: these fail only in a browser. |
+| **node:test + mongodb-memory-server** | 55 E2E tests run the real HTTP app against a real (throwaway) MongoDB - no mocking of the layers under test. |
+| **Playwright for the parts tests cannot see** | 38 checks drive the built app in Chromium as two users. Undo after opening a document, a menu clickable behind its own backdrop, a bubble menu that follows the right scroll container: these fail only in a browser. |
 
 One process serves both the API and the built SPA in production - the
 cheapest thing to deploy, the fewest CORS problems, one URL for reviewers.
@@ -199,6 +199,12 @@ what its adversarial test proves.
   selection menu follows the editor's own scroll container, JWT verification
   pins HS256, shutdown drains in-flight requests before closing the database,
   and the AI key mask now also covers Google's newer `AQ.` key format.
+- **Upstream capacity errors are retried.** On the free Gemini tier a 503
+  ("model overloaded") or a momentary 429 is routine and clears within seconds;
+  driving the live site showed them on roughly half of rapid calls. The engine
+  now retries such failures twice with a short pause (honouring the request's
+  abort signal) before reporting an error, so a reviewer sees an answer that is
+  a little late rather than a failure.
 
 Deliberate residual tradeoff: registration and share-by-email reveal
 whether an account exists. For an internal collaboration tool this is the
