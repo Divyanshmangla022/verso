@@ -244,6 +244,22 @@ describe('documents', () => {
     assert.match(res.body, /\*\*now\*\*|<u>\*\*now\*\*<\/u>|\*\*<u>now<\/u>\*\*/);
     assert.match(res.body, /- first/);
   });
+  it("duplicates a document into the caller's own workspace", async () => {
+    const copy = await call<{ id: string; title: string; version: number; myRole: string; content: unknown }>(
+      'POST',
+      `/api/docs/${docId}/duplicate`,
+      { token: owner.token },
+    );
+    assert.equal(copy.status, 201);
+    assert.notEqual(copy.body.id, docId);
+    assert.equal(copy.body.title, 'Launch plan (copy)');
+    assert.equal(copy.body.version, 1);
+    assert.equal(copy.body.myRole, 'owner');
+    assert.deepEqual(copy.body.content, SAMPLE_DOC, 'the copy starts from the current content');
+
+    const list = await call<{ owned: { id: string }[] }>('GET', '/api/docs', { token: owner.token });
+    assert.ok(list.body.owned.some((d) => d.id === copy.body.id), 'the copy is listed under owned documents');
+  });
 });
 
 describe('sharing & access control', () => {
