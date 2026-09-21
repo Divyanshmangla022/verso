@@ -112,6 +112,26 @@ docsRouter.post(
   }),
 );
 
+// POST /api/docs/:id/duplicate - copy a document you can see into your own workspace.
+docsRouter.post(
+  '/:id/duplicate',
+  asyncRoute(async (req, res) => {
+    const user = currentUser(req);
+    const { doc } = await requireDocAccess(user._id, pathParam(req, 'id'), 'viewer');
+    const now = new Date();
+    const copy: Omit<DocumentDoc, '_id'> = {
+      title: `${doc.title} (copy)`,
+      ownerId: user._id,
+      content: doc.content,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const result = await documents().insertOne(copy as DocumentDoc);
+    res.status(201).json(detail({ ...(copy as DocumentDoc), _id: result.insertedId }, toPublicUser(user), 'owner', []));
+  }),
+);
+
 function detail(doc: DocumentDoc, owner: PublicUser, myRole: DocDetail['myRole'], sharedWith: ShareEntry[] | null): DocDetail {
   const base = summary(doc, owner, myRole, sharedWith?.length ?? 0);
   return { ...base, content: doc.content, ...(sharedWith ? { sharedWith } : {}) };
