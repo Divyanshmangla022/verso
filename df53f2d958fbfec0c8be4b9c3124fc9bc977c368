@@ -1,0 +1,57 @@
+server/src/docs/routes.ts
+  s_7f371d2c504f6f::t_36fba43dfbdf02 115-134
+server/test/api.e2e.test.ts
+  s_7f371d2c504f6f::t_a10e65c7b51946 247-262
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "autter_version": "2.0.9",
+  "base_commit_sha": "df53f2d958fbfec0c8be4b9c3124fc9bc977c368",
+  "branch": "feat/duplicate-document",
+  "prompts": {
+    "s_7f371d2c504f6f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "verso-dup-1790015535",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Divyanshmangla022 <103934090+Divyanshmangla022@users.noreply.github.com>",
+      "messages_url": "cas:aa217ff869a35c44bf3de87ca2760b0d3d63d76fb2f57569d1c697e8dd803dbe",
+      "total_additions": 36,
+      "total_deletions": 0,
+      "accepted_lines": 36,
+      "overriden_lines": 0
+    }
+  },
+  "sessions": {
+    "s_7f371d2c504f6f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "verso-dup-1790015535",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Divyanshmangla022 <103934090+Divyanshmangla022@users.noreply.github.com>",
+      "messages_url": "cas:aa217ff869a35c44bf3de87ca2760b0d3d63d76fb2f57569d1c697e8dd803dbe",
+      "stats": {
+        "total_additions": 36,
+        "total_deletions": 0,
+        "accepted_lines": 36,
+        "overriden_lines": 0,
+        "files": {
+          "server/src/docs/routes.ts": {
+            "total_additions": 20,
+            "total_deletions": 0,
+            "accepted_lines": 20,
+            "overriden_lines": 0
+          },
+          "server/test/api.e2e.test.ts": {
+            "total_additions": 16,
+            "total_deletions": 0,
+            "accepted_lines": 16,
+            "overriden_lines": 0
+          }
+        }
+      }
+    }
+  }
+}
