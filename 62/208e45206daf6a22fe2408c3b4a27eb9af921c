@@ -6,23 +6,8 @@ server/test/api.e2e.test.ts
 {
   "schema_version": "authorship/3.0.0",
   "autter_version": "2.0.9",
-  "base_commit_sha": "df53f2d958fbfec0c8be4b9c3124fc9bc977c368",
-  "branch": "feat/duplicate-document",
-  "prompts": {
-    "s_7f371d2c504f6f": {
-      "agent_id": {
-        "tool": "claude",
-        "id": "verso-dup-1790015535",
-        "model": "claude-fable-5-1"
-      },
-      "human_author": "Divyanshmangla022 <103934090+Divyanshmangla022@users.noreply.github.com>",
-      "messages_url": "cas:aa217ff869a35c44bf3de87ca2760b0d3d63d76fb2f57569d1c697e8dd803dbe",
-      "total_additions": 36,
-      "total_deletions": 0,
-      "accepted_lines": 36,
-      "overriden_lines": 0
-    }
-  },
+  "base_commit_sha": "62208e45206daf6a22fe2408c3b4a27eb9af921c",
+  "prompts": {},
   "sessions": {
     "s_7f371d2c504f6f": {
       "agent_id": {
