@@ -20,7 +20,7 @@
     "markdown-it": "14.0.0",
     "mongodb": "6.1.13",
     "multer": "2.3.0",
-    "zod": "^4.1.5"
+    "zod": "4.6.6"
   },
   "optionalDependencies": {
     "@google/genai": "^1.16.0"
