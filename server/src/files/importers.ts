@@ -1,5 +1,6 @@
-import { generateJSON } from '@tiptap/html';
+import { generateJSON } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import { Window } from 'happy-dom';
 import mammoth from 'mammoth';
 import MarkdownIt from 'markdown-it';
 import type { PMNode } from '@verso/shared';
@@ -17,6 +18,35 @@ const md = new MarkdownIt({ html: false, linkify: true });
 
 /** The same extension set the client editor runs, so imported JSON always renders. */
 const extensions = [StarterKit];
+
+/**
+ * Parse HTML into editor JSON. `@tiptap/html` is deprecated in Tiptap v3; the
+ * supported `generateJSON` helper lives in `@tiptap/core` but needs a DOM, so a
+ * throwaway happy-dom window is installed for the synchronous parse and torn
+ * down afterwards.
+ */
+function generateJsonFromHtml(html: string): unknown {
+  const window = new Window({
+    settings: {
+      disableJavaScriptEvaluation: true,
+      disableJavaScriptFileLoading: true,
+      disableCSSFileLoading: true,
+      disableIframePageLoading: true,
+      disableComputedStyleRendering: true,
+    },
+  });
+  const globals = globalThis as typeof globalThis & { window?: unknown };
+  const previousWindow = globals.window;
+  globals.window = window;
+  try {
+    return generateJSON(html, extensions);
+  } finally {
+    if (previousWindow === undefined) delete globals.window;
+    else globals.window = previousWindow;
+    window.happyDOM.abort();
+    window.happyDOM.close();
+  }
+}
 
 export interface ImportedDoc {
   title: string;
@@ -45,7 +75,7 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
     case '.md': {
       const html = md.render(buffer.toString('utf8'));
       warnDroppedHtml(html, warnings);
-      content = sanitizeGenerated(generateJSON(html, extensions));
+      content = sanitizeGenerated(generateJsonFromHtml(html));
       break;
     }
     case '.docx': {
@@ -59,7 +89,7 @@ export async function importFile(originalName: string, buffer: Buffer): Promise<
       } catch {
         throw badRequest('Could not read this .docx file - it may be corrupted or not a real Word document');
       }
-      content = sanitizeGenerated(generateJSON(html, extensions));
+      content = sanitizeGenerated(generateJsonFromHtml(html));
       break;
     }
     default:

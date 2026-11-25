@@ -11,10 +11,10 @@
   },
   "dependencies": {
     "@tiptap/core": "^3.33.0",
-    "@tiptap/html": "^3.33.0",
     "@tiptap/starter-kit": "^3.33.0",
     "bcryptjs": "^3.0.2",
     "express": "^5.1.0",
+    "happy-dom": "^20.11.12",
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.11.0",
     "markdown-it": "^14.1.0",
