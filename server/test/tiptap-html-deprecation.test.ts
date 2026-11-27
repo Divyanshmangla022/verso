@@ -11,6 +11,7 @@ import { importFile } from '../src/files/importers.ts';
 const serverPackage = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ) as { dependencies: Record<string, string> };
+const lockfile = readFileSync(new URL('../../package-lock.json', import.meta.url), 'utf8');
 const importersSource = readFileSync(new URL('../src/files/importers.ts', import.meta.url), 'utf8');
 
 describe('Tiptap HTML import path', () => {
@@ -18,8 +19,12 @@ describe('Tiptap HTML import path', () => {
     assert.equal(serverPackage.dependencies['@tiptap/html'], undefined);
   });
 
+  it('does not keep the deprecated package in the lockfile', () => {
+    assert.doesNotMatch(lockfile, /"@tiptap\/html"/);
+  });
+
   it('uses the supported HTML parser from @tiptap/core', () => {
-    assert.doesNotMatch(importersSource, /from\s+['"]@tiptap\/html['"]/);
+    assert.doesNotMatch(importersSource, /from\s+['"]@tiptap\/html(?:\/[^'"]*)?['"]/);
     assert.match(importersSource, /from\s+['"]@tiptap\/core['"]/);
   });
 
