@@ -120,7 +120,11 @@ function EditorInner() {
   const editor = useEditor(
     {
       extensions: [
-        StarterKit.configure({ link: { openOnClick: false } }),
+        // StarterKit v3 replaced the `history` option with `undoRedo`; it stays
+        // enabled (the toolbar's undo/redo drive it). Link and Underline ship in
+        // StarterKit v3 and stay enabled too - links just must not navigate on
+        // click while editing.
+        StarterKit.configure({ undoRedo: {}, link: { openOnClick: false } }),
         Placeholder.configure({ placeholder: 'Start writing, or select text for AI actions...' }),
       ],
       content: (doc?.content ?? null) as JSONContent | null,
